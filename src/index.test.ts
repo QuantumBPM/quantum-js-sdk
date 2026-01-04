@@ -10,7 +10,7 @@ describe('QuantumDMN SDK', () => {
         let callCount = 0;
         const client = createClient({
             baseUrl: 'https://api.quantumdmn.com',
-            tokenProvider: () => {
+            tokenProvider: async () => {
                 callCount++;
                 return 'dynamic-token';
             },

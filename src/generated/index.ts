@@ -29,7 +29,7 @@ export type { FeelContext } from './models/FeelContext';
 export type { FeelList } from './models/FeelList';
 export type { FeelNumber } from './models/FeelNumber';
 export type { FeelString } from './models/FeelString';
-export type { FeelValue } from './models/FeelValue';
+export { FeelValue } from './models/FeelValue';
 export type { FrontendConfig } from './models/FrontendConfig';
 export type { HitRule } from './models/HitRule';
 export type { KpiTrend } from './models/KpiTrend';

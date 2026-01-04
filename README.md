@@ -13,125 +13,125 @@ yarn add @quantumdmn/sdk
 ## Features
 
 - Full TypeScript support with complete type definitions
-- Axios-based HTTP client (works in browser and Node.js)
+- Axios-based HTTP client
 - Automatic token injection for authentication
 - Tree-shakeable - import only what you need
 
 ## Quick Start
 
 ```typescript
-import { initClient, listProjects, evaluateStored } from '@quantumdmn/sdk';
+import { createClient, DmnEngine, FeelValue, ZitadelTokenProvider } from '@quantumdmn/sdk';
 
-// initialize with your token provider
-initClient({
-  baseUrl: 'https://api.quantumdmn.com',
-  tokenProvider: () => getAccessToken(), // implement your auth logic
+// 1. Setup Authentication
+// For backend services, use ZitadelTokenProvider with a service account key
+const tokenProvider = new ZitadelTokenProvider(
+    './service-account.json', 
+    'https://auth.quantumdmn.com', 
+    'your-zitadel-project-id'
+);
+
+// 2. Initialize Client
+const client = createClient({
+    baseUrl: 'https://api.quantumdmn.com',
+    tokenProvider: tokenProvider.getProvider(),
 });
 
-// list projects
-const { data: projects } = await listProjects();
-console.log(projects?.map(p => p.name));
+// 3. Initialize Engine client
+const engine = new DmnEngine(client, 'your-project-id');
 
-// evaluate a decision
-const { data: result } = await evaluateStored({
-  path: { projectID: 'your-project-id', definitionID: 'your-definition-id' },
-  body: {
-    context: { age: 25, income: 50000 }
-  }
-});
+// 4. Prepare Context
+const context = {
+    age: FeelValue.ofNumber(25),
+    income: FeelValue.ofNumber(50000),
+    role: FeelValue.ofString('admin'),
+    active: FeelValue.ofBoolean(true)
+    // Or let auto-inference handle it:
+    // ...FeelValue.from({ other: 123 }).asContext()
+};
+
+// 5. Evaluate Decision
+try {
+    const result = await engine.evaluate('your-definition-id', context);
+    console.log('Result:', result);
+} catch (error) {
+    console.error('Evaluation failed:', error);
+}
 ```
 
 ## Authentication
 
-The SDK uses a token provider pattern for authentication. Implement a function that returns a valid access token:
+The SDK provides built-in support for Service Account authentication via `ZitadelTokenProvider`.
+
+### Service Account Authentication (Node.js)
+
+1.  Download your Service Account JSON key file.
+2.  Install required dependencies:
+    ```bash
+    npm install jsonwebtoken
+    ```
+3.  Use `ZitadelTokenProvider`:
 
 ```typescript
-// with static token
-import { initClientWithToken } from '@quantumdmn/sdk';
-initClientWithToken('https://api.quantumdmn.com', 'your-static-token');
+import { ZitadelTokenProvider } from '@quantumdmn/sdk';
 
-// with dynamic token (recommended for production)
-import { initClient } from '@quantumdmn/sdk';
-initClient({
-  baseUrl: 'https://api.quantumdmn.com',
-  tokenProvider: async () => {
-    // implement Zitadel JWT Profile or your auth logic
-    return await fetchTokenFromZitadel();
-  }
-});
+const auth = new ZitadelTokenProvider(
+    '/path/to/key.json',           // Path to JSON key file
+    'https://auth.quantumdmn.com', // Auth Server URL
+    'your-zitadel-project-id'      // Project ID (numeric) for audience scope
+);
+
+// Get a raw token if needed
+const token = await auth.getToken();
 ```
 
-### Authentication with Zitadel JSON Key (Node.js)
+### Manual Token Handling
 
-When running in a Node.js environment (e.g., backend service), you can use a Service Account JSON Key.
-
-**Required:** `npm install jsonwebtoken`
+If you are using a different authentication method or running in the browser with an existing token:
 
 ```typescript
-import jwt from 'jsonwebtoken';
-import { readFileSync } from 'fs';
-import { initClient } from '@quantumdmn/sdk';
+import { createClientWithToken } from '@quantumdmn/sdk';
 
-const key = JSON.parse(readFileSync('./service-account.json', 'utf-8'));
-const ISSUER_URL = 'https://auth.quantumdmn.com';
+const client = createClientWithToken('https://api.quantumdmn.com', 'your-access-token');
+```
 
-async function getAccessToken() {
-    // 1. Sign JWT
-    const token = jwt.sign({}, key.key, {
-        algorithm: 'RS256',
-        issuer: key.userId,
-        subject: key.userId,
-        audience: ISSUER_URL,
-        expiresIn: '1h',
-        keyid: key.keyId,
-    });
+## Type-Safe FEEL Values
 
-    // 2. Exchange for Access Token
-    const params = new URLSearchParams();
-    params.append('grant_type', 'urn:ietf:params:oauth:grant-type:jwt-bearer');
-    params.append('assertion', token);
-    params.append('scope', 'openid profile urn:zitadel:iam:user:resourceowner');
+The `FeelValue` class ensures type safety when working with DMN Data Types.
 
-    const resp = await fetch(`${ISSUER_URL}/oauth/v2/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params
-    });
-    
-    const data = await resp.json();
-    return data.access_token;
-}
+```typescript
+import { FeelValue } from '@quantumdmn/sdk';
 
-// Initialize
-initClient({
-    baseUrl: 'https://api.quantumdmn.com',
-    tokenProvider: getAccessToken,
+// Creation
+const num = FeelValue.ofNumber(10);
+const str = FeelValue.ofString('hello');
+const bool = FeelValue.ofBoolean(true);
+const list = FeelValue.ofList([num, str]);
+const ctx = FeelValue.ofContext({ field: num });
+
+// Inference
+const fromRaw = FeelValue.from({ 
+    amount: 1000, 
+    currency: 'USD',
+    tags: ['sales', 'Q1'] 
 });
+
+// Unwrapping
+const raw = fromRaw.toRaw(); // { amount: 1000, ... }
+const numVal = num.asNumber(); // 10
 ```
 
 ## API Reference
 
-All API methods are exported directly. Common operations:
+### DmnEngine
+- `evaluate(xmlDefinitionId: string, context: Record<string, FeelValue>)`: Evaluate a deployed definition.
 
-### Projects
-- `listProjects()` - List all projects
-- `createProject({ body })` - Create a new project
-- `getProject({ path: { projectID } })` - Get project details
-- `deleteProject({ path: { projectID } })` - Delete a project
+### Client Helpers
+All generated API methods are available via `createClient().default`.
 
-### Definitions
-- `listDefinitions({ path: { projectID } })` - List definitions
-- `createDefinition({ path: { projectID }, body })` - Create definition  
-- `getDefinition({ path: { projectID, definitionID } })` - Get definition
-- `updateDefinition({ path: { projectID, definitionID }, body })` - Update definition
-
-### Evaluation
-- `evaluateStored({ path: { projectID, definitionID }, body })` - Evaluate stored definition
-- `evaluateDesign({ body })` - Evaluate inline DMN XML
-
-### Executions
-- `listExecutions({ path: { projectID, definitionID } })` - List executions
-- `getExecution({ path: { projectID, executionID } })` - Get execution details
+- `listProjects()`
+- `createDefinition()`
+- `evaluateStored()`
+- `...and more`
 
 ## License
 

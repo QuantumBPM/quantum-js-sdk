@@ -1,10 +1,13 @@
+import { DmnClient } from './generated/DmnClient';
 export * from './generated';
-export { DmnClient } from './generated/DmnClient';
+export { DmnClient };
+export * from './auth/ZitadelTokenProvider';
+export * from './DmnEngine';
 
 /**
  * Token provider type - returns an access token (or Promise of one)
  */
-export type TokenProvider = () => string | Promise<string>;
+export type TokenProvider = () => Promise<string>;
 
 /**
  * Configuration options for creating a QuantumDMN client
@@ -32,7 +35,6 @@ export interface QuantumDMNConfig {
  * ```
  */
 export function createClient(config: QuantumDMNConfig) {
-    const { DmnClient } = require('./generated/DmnClient');
     return new DmnClient({
         BASE: config.baseUrl,
         TOKEN: config.tokenProvider,
@@ -46,6 +48,6 @@ export function createClient(config: QuantumDMNConfig) {
 export function createClientWithToken(baseUrl: string, token: string) {
     return createClient({
         baseUrl,
-        tokenProvider: () => token,
+        tokenProvider: async () => token,
     });
 }
