@@ -6,7 +6,6 @@ import type { DailyStat } from './DailyStat';
 import type { KpiTrend } from './KpiTrend';
 export type OverviewResponse = {
     stats?: {
-        totalRequests?: number;
         totalCredits?: number;
         requestsTrend?: Array<DailyStat>;
         creditsTrend?: Array<DailyStat>;

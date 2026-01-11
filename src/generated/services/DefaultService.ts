@@ -12,6 +12,7 @@ import type { EvaluateStoredRequest } from '../models/EvaluateStoredRequest';
 import type { EvaluationResult } from '../models/EvaluationResult';
 import type { Execution } from '../models/Execution';
 import type { FeelContext } from '../models/FeelContext';
+import type { FeelValue } from '../models/FeelValue';
 import type { FrontendConfig } from '../models/FrontendConfig';
 import type { OrganizationUser } from '../models/OrganizationUser';
 import type { OverviewResponse } from '../models/OverviewResponse';
@@ -230,6 +231,19 @@ export class DefaultService {
              * List of Decision or Decision Service names to evaluate (optional)
              */
             decisions?: Array<string>;
+            /**
+             * Initial state for windowed KPIs (KPI ID -> array of timestamped values)
+             */
+            kpiInitialState?: Record<string, Array<{
+                metrics: Array<{
+                    value: FeelValue;
+                    field: string;
+                }>;
+                /**
+                 * Timestamp of the measurement (ISO 8601)
+                 */
+                timestamp: string;
+            }>>;
         },
     ): CancelablePromise<Record<string, EvaluationResult>> {
         return this.httpRequest.request({

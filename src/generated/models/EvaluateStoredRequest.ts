@@ -7,11 +7,15 @@ export type EvaluateStoredRequest = {
     version?: number;
     context: FeelContext;
     /**
-     * List of Decision Services to evaluate
+     * Optional identifier for the business object being processed. If provided, existing metrics for this businessId and XML Definition ID will be replaced.
+     */
+    businessId?: string;
+    /**
+     * Names of the Decision Services to evaluate (optional)
      */
     decisionServices?: Array<string>;
     /**
-     * List of Decision or Decision Service names to evaluate
+     * List of Decision or Decision Service names to evaluate (optional)
      */
     decisions?: Array<string>;
 };
