@@ -222,6 +222,7 @@ export class DefaultService {
     public evaluateDesign(
         requestBody: {
             xml: string;
+            additionalXmls?: Array<string>;
             context?: FeelContext;
             /**
              * Names of the Decision Services to evaluate (optional)
