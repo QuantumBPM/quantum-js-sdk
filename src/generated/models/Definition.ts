@@ -34,5 +34,9 @@ export type Definition = {
      * Timestamp when this version was uploaded.
      */
     createdAt: string;
+    /**
+     * Total number of stored versions under this `definitionsID`. Populated by the latest-listing endpoint; absent on single-version reads.
+     */
+    versionCount?: number;
 };
 

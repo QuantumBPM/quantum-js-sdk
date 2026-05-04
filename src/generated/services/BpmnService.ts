@@ -130,7 +130,10 @@ export class BpmnService {
     }
     /**
      * Delete a BPMN resource version
-     * Permanently deletes a single resource version. Past instances of this version remain in history.
+     * Permanently deletes a single resource version. Past instances of this
+     * version remain in history. Refused with 409 Conflict while any version
+     * of any process inside the resource still has running instances.
+     *
      * @param projectId
      * @param resourceId
      * @returns void
@@ -146,6 +149,9 @@ export class BpmnService {
             path: {
                 'projectID': projectId,
                 'resourceID': resourceId,
+            },
+            errors: {
+                409: `Conflict — resource has running instances`,
             },
         });
     }
