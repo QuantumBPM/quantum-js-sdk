@@ -3,6 +3,6 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * FEEL boolean
+ * FEEL boolean.
  */
 export type FeelBoolean = boolean;

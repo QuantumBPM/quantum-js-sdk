@@ -3,6 +3,6 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * FEEL number (decimal)
+ * FEEL number. Maps to a decimal value at runtime.
  */
 export type FeelNumber = number;

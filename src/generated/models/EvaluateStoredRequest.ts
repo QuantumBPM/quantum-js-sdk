@@ -3,19 +3,21 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { FeelContext } from './FeelContext';
+/**
+ * Payload for evaluating a stored DMN definition.
+ */
 export type EvaluateStoredRequest = {
+    /**
+     * Specific definition version to evaluate. Defaults to the latest version.
+     */
     version?: number;
     context: FeelContext;
     /**
-     * Optional identifier for the business object being processed. If provided, existing metrics for this businessId and XML Definition ID will be replaced.
-     */
-    businessId?: string;
-    /**
-     * Names of the Decision Services to evaluate (optional)
+     * Names of decision services to evaluate. If empty, no decision services are evaluated.
      */
     decisionServices?: Array<string>;
     /**
-     * List of Decision or Decision Service names to evaluate (optional)
+     * Names of decisions or decision services to evaluate. If empty, all decisions are evaluated.
      */
     decisions?: Array<string>;
 };

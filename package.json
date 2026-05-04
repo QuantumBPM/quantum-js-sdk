@@ -1,35 +1,35 @@
 {
-    "name": "@quantumdmn/sdk",
+    "name": "@quantumbpm/sdk",
     "version": "1.0.0",
-    "description": "QuantumDMN TypeScript/JavaScript SDK for the DMN Engine API",
+    "description": "QuantumBPM TypeScript/JavaScript SDK — DMN evaluation, BPMN orchestration, and external job workers.",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
         "build": "tsc",
         "test": "jest",
-        "generate": "openapi-ts -i openapi.yaml -o src/generated -c axios",
+        "generate": "openapi-typescript-codegen --input openapi.yaml --output src/generated --client axios --name RawClient",
         "prepublishOnly": "npm run build"
     },
     "keywords": [
+        "quantumbpm",
         "dmn",
-        "decision",
         "bpmn",
-        "quantumdmn",
+        "decision",
+        "workflow",
+        "feel",
         "sdk"
     ],
-    "author": "QuantumDMN",
+    "author": "QuantumBPM",
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "https://github.com/QuantumDMN/dmn-js-sdk.git"
+        "url": "https://github.com/QuantumBPM/quantum-js-sdk.git"
     },
     "dependencies": {
-        "@hey-api/client-axios": "^0.9.1",
         "axios": "^1.6.0",
         "jsonwebtoken": "^9.0.0"
     },
     "devDependencies": {
-        "@hey-api/openapi-ts": "^0.53.0",
         "@types/jest": "^29.5.0",
         "@types/jsonwebtoken": "^9.0.10",
         "@types/node": "^20.0.0",
