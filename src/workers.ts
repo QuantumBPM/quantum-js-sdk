@@ -72,6 +72,12 @@ export interface WorkerConfig {
     clientId?: string;
     /** Optional logger. Defaults to console. */
     logger?: { error(msg: string, ...args: unknown[]): void; warn(msg: string, ...args: unknown[]): void };
+    /**
+     * Cap on the byte length of the auto-built WORKER_ERROR message attached
+     * when a handler rejects with something other than a BpmnError. Default
+     * 2048. User-thrown BpmnError variables are not clamped.
+     */
+    maxErrorMessageBytes?: number;
 }
 
 interface Registration {
@@ -87,6 +93,7 @@ const DEFAULT_OPTIONS: Required<HandleOptions> = {
 };
 
 const POLL_ERROR_BACKOFF_MS = 2_000;
+const DEFAULT_MAX_ERROR_MESSAGE_BYTES = 2048;
 
 /**
  * Worker is a long-poll runtime owning a set of handlers, one per task type.
@@ -95,6 +102,7 @@ export class Worker {
     private readonly registrations = new Map<string, Registration>();
     private readonly clientId: string;
     private readonly logger: NonNullable<WorkerConfig['logger']>;
+    private readonly maxErrorMessageBytes: number;
 
     constructor(
         private readonly raw: RawClient,
@@ -103,6 +111,10 @@ export class Worker {
     ) {
         this.clientId = config.clientId ?? `worker-${hostname()}-${process.pid}`;
         this.logger = config.logger ?? console;
+        this.maxErrorMessageBytes =
+            config.maxErrorMessageBytes && config.maxErrorMessageBytes > 0
+                ? config.maxErrorMessageBytes
+                : DEFAULT_MAX_ERROR_MESSAGE_BYTES;
     }
 
     /**
@@ -202,7 +214,8 @@ export class Worker {
             } else {
                 this.logger.error(`workers: handler ${r.taskType}`, err);
                 const message = err instanceof Error ? err.message : String(err);
-                await this.throwError(raw, 'WORKER_ERROR', new Vars().set('error', message));
+                const clamped = this.clampWorkerErrorMessage(r.taskType, message);
+                await this.throwError(raw, 'WORKER_ERROR', new Vars().set('error', clamped));
             }
         } finally {
             clearInterval(heartbeatTimer);
@@ -248,6 +261,30 @@ export class Worker {
         } catch (err) {
             this.logger.error(`workers: throwError ${job.executionKey}`, err);
         }
+    }
+
+    /**
+     * Shortens an unhandled handler exception's message to the configured
+     * byte budget. UTF-8 safe (cuts on code-point boundary). Logs a WARN
+     * and appends a truncation marker when it triggers. Visible to tests.
+     */
+    clampWorkerErrorMessage(taskType: string, msg: string): string {
+        const limit = this.maxErrorMessageBytes;
+        const encoder = new TextEncoder();
+        const bytes = encoder.encode(msg);
+        if (limit <= 0 || bytes.length <= limit) {
+            return msg;
+        }
+        const marker = `…[truncated, original ${bytes.length} bytes]`;
+        const markerBytes = encoder.encode(marker).length;
+        const budget = Math.max(0, limit - markerBytes);
+        // Cut on a code-point boundary so we never emit half a multi-byte rune.
+        const slice = bytes.subarray(0, budget);
+        const decoded = new TextDecoder('utf-8', { fatal: false }).decode(slice).replace(/�+$/, '');
+        this.logger.warn(
+            `workers: WORKER_ERROR message truncated for task=${taskType} from ${bytes.length} to ${limit} bytes`,
+        );
+        return decoded + marker;
     }
 }
 

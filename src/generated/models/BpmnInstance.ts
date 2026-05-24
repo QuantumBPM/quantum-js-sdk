@@ -34,6 +34,26 @@ export type BpmnInstance = {
      * Timestamp when the instance reached a terminal status. Empty while running.
      */
     completedAt?: string;
+    /**
+     * True when at least one unresolved incident is currently attached to this instance. Computed at query time against the open-incidents index — useful for rendering a "needs attention" indicator in instance lists without paying for a per-row state fetch from the engine.
+     */
+    hasIncident?: boolean;
+    /**
+     * Timestamp at which this instance was paused at INSTANCE scope. Empty
+     * when not instance-suspended. The instance may still be effectively
+     * suspended via its definition — call `GetBpmnInstance` to read both
+     * scopes if you need the full picture.
+     *
+     */
+    suspendedAt?: string;
+    /**
+     * Operator who suspended this instance (instance scope). Empty when not instance-suspended.
+     */
+    suspendedBy?: string;
+    /**
+     * Free-text reason captured at suspend time.
+     */
+    suspendReason?: string;
 };
 export namespace BpmnInstance {
     /**

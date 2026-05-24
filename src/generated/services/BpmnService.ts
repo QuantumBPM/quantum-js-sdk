@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { BpmnIncidentRecordPaginatedResponse } from '../models/BpmnIncidentRecordPaginatedResponse';
 import type { BpmnInstanceChildrenResponse } from '../models/BpmnInstanceChildrenResponse';
 import type { BpmnProcessSummaryPaginatedResponse } from '../models/BpmnProcessSummaryPaginatedResponse';
 import type { BpmnProcessVersionPaginatedResponse } from '../models/BpmnProcessVersionPaginatedResponse';
@@ -19,6 +20,8 @@ import type { MigrateBpmnInstanceRequest } from '../models/MigrateBpmnInstanceRe
 import type { MigrationValidationResult } from '../models/MigrationValidationResult';
 import type { ModifyBpmnInstanceRequest } from '../models/ModifyBpmnInstanceRequest';
 import type { StartBpmnTestInstanceRequest } from '../models/StartBpmnTestInstanceRequest';
+import type { SuspendBpmnDefinitionRequest } from '../models/SuspendBpmnDefinitionRequest';
+import type { SuspendBpmnInstanceRequest } from '../models/SuspendBpmnInstanceRequest';
 import type { UpdateUserTaskAssignmentRequest } from '../models/UpdateUserTaskAssignmentRequest';
 import type { UserTask } from '../models/UserTask';
 import type { ValidateBpmnResourceRequest } from '../models/ValidateBpmnResourceRequest';
@@ -425,6 +428,60 @@ export class BpmnService {
         });
     }
     /**
+     * List BPMN incidents
+     * Cross-instance audit listing of incidents in the project. By default
+     * returns open incidents first (unresolved), ordered by recency.
+     * Filterable by definition, error type, status, and time window.
+     *
+     * Each row carries the parent process metadata (processID, processName)
+     * so a single page render needs no follow-up queries against the
+     * instances endpoint. Click-through to a specific instance still uses
+     * the workflow-scoped detail endpoint.
+     *
+     * @param projectId
+     * @param definitionId Restrict to incidents on instances of a single process definition.
+     * @param workflowId Restrict to incidents on a single instance — useful for an instance-detail "all incidents ever raised here" view that includes resolved rows.
+     * @param status Filter by lifecycle status. `open` returns unresolved incidents;
+     * `resolved` returns only resolved ones. Omit to return both.
+     *
+     * @param errorType Restrict to a single error category (matches `BpmnIncidentRecord.errorType`).
+     * @param since Earliest `raisedAt` to include (inclusive).
+     * @param until Latest `raisedAt` to include (exclusive).
+     * @param page
+     * @param pageSize
+     * @returns BpmnIncidentRecordPaginatedResponse OK
+     * @throws ApiError
+     */
+    public listBpmnIncidents(
+        projectId: string,
+        definitionId?: string,
+        workflowId?: string,
+        status?: 'open' | 'resolved',
+        errorType?: 'BpmnError' | 'EscalationError' | 'CompensationError' | 'FeelError' | 'NoHandler' | 'GatewayNoMatch' | 'TimerResolution' | 'LinkNotFound' | 'MigrationError' | 'Unknown',
+        since?: string,
+        until?: string,
+        page?: number,
+        pageSize?: number,
+    ): CancelablePromise<BpmnIncidentRecordPaginatedResponse> {
+        return this.httpRequest.request({
+            method: 'GET',
+            url: '/projects/{projectID}/bpmn/incidents',
+            path: {
+                'projectID': projectId,
+            },
+            query: {
+                'definitionID': definitionId,
+                'workflowID': workflowId,
+                'status': status,
+                'errorType': errorType,
+                'since': since,
+                'until': until,
+                'page': page,
+                'pageSize': pageSize,
+            },
+        });
+    }
+    /**
      * Migrate a running instance to a newer process version
      * Moves a running instance from its current process version to a newer
      * one. Element mappings tell the engine how to translate active tokens
@@ -575,6 +632,139 @@ export class BpmnService {
             },
             body: requestBody,
             mediaType: 'application/json',
+        });
+    }
+    /**
+     * Suspend a BPMN instance
+     * Pauses forward token dispatch on a single running instance. The
+     * instance's lifecycle status stays RUNNING; an orthogonal `suspendedAt`
+     * flag layers on top. Idempotent — a second call against an already-
+     * suspended instance is a no-op.
+     *
+     * While suspended: cancel / terminate / migrate / force-rotate / resolve-
+     * incident / variable update / modify all still work. Parked tokens
+     * released by signal demuxes or timer fires queue internally and dispatch
+     * on resume.
+     *
+     * The audit (operator, reason, timestamp) is also recorded in the
+     * workflow's Temporal history as a `SuspendInstanceEvent` so the timeline
+     * view on the instance detail page can render the cycle.
+     *
+     * @param projectId
+     * @param workflowId
+     * @param requestBody
+     * @returns void
+     * @throws ApiError
+     */
+    public suspendBpmnInstance(
+        projectId: string,
+        workflowId: string,
+        requestBody?: SuspendBpmnInstanceRequest,
+    ): CancelablePromise<void> {
+        return this.httpRequest.request({
+            method: 'POST',
+            url: '/projects/{projectID}/bpmn/instances/{workflowID}/suspend',
+            path: {
+                'projectID': projectId,
+                'workflowID': workflowId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+        });
+    }
+    /**
+     * Resume a suspended BPMN instance
+     * Clears the instance-scope suspension. If the parent definition is also
+     * suspended the instance remains effectively paused until the definition
+     * is resumed as well. Idempotent.
+     *
+     * @param projectId
+     * @param workflowId
+     * @returns void
+     * @throws ApiError
+     */
+    public resumeBpmnInstance(
+        projectId: string,
+        workflowId: string,
+    ): CancelablePromise<void> {
+        return this.httpRequest.request({
+            method: 'POST',
+            url: '/projects/{projectID}/bpmn/instances/{workflowID}/resume',
+            path: {
+                'projectID': projectId,
+                'workflowID': workflowId,
+            },
+        });
+    }
+    /**
+     * Suspend every running instance of a BPMN definition
+     * Pauses every running instance of one deployed process definition AND
+     * rejects new instance starts on that definition until it is resumed.
+     *
+     * The handler acquires a row-level lock on the definition before flipping
+     * the flag so a `StartBpmnInstance` racing the suspend can't slip through.
+     * It then iterates over every running instance (`status='RUNNING'`) and
+     * sends each one a definition-scope suspend signal via the engine API.
+     * Instances that were also explicitly instance-suspended stay paused
+     * after a definition-scope resume — the operator must clear that scope
+     * too.
+     *
+     * Idempotent. The reason cascades to every affected instance's history
+     * audit (`SuspendDefinitionEvent`) so the UI can render where the pause
+     * came from.
+     *
+     * @param projectId
+     * @param definitionId Platform identifier of the process definition version (same UUID `BpmnProcessVersion.id` exposes).
+     * @param requestBody
+     * @returns void
+     * @throws ApiError
+     */
+    public suspendBpmnDefinition(
+        projectId: string,
+        definitionId: string,
+        requestBody?: SuspendBpmnDefinitionRequest,
+    ): CancelablePromise<void> {
+        return this.httpRequest.request({
+            method: 'POST',
+            url: '/projects/{projectID}/bpmn/definitions/{definitionID}/suspend',
+            path: {
+                'projectID': projectId,
+                'definitionID': definitionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                404: `Definition not found`,
+            },
+        });
+    }
+    /**
+     * Resume a suspended BPMN definition
+     * Clears the definition-scope suspension and fans out a resume signal to
+     * every running instance of the definition. Instances that were also
+     * instance-suspended stay paused until their own scope is cleared. New
+     * instance starts are accepted again once the definition flag clears.
+     * Idempotent.
+     *
+     * @param projectId
+     * @param definitionId
+     * @returns void
+     * @throws ApiError
+     */
+    public resumeBpmnDefinition(
+        projectId: string,
+        definitionId: string,
+    ): CancelablePromise<void> {
+        return this.httpRequest.request({
+            method: 'POST',
+            url: '/projects/{projectID}/bpmn/definitions/{definitionID}/resume',
+            path: {
+                'projectID': projectId,
+                'definitionID': definitionId,
+            },
+            errors: {
+                404: `Definition not found`,
+            },
         });
     }
     /**

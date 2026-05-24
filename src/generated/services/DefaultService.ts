@@ -665,6 +665,22 @@ export class DefaultService {
      * @param projectId
      * @param definitionId
      * @param status
+     * @param hasIncident Filter by whether the instance has at least one unresolved incident.
+     * Omit to return all instances regardless of incident status; pass
+     * `true` to show only instances that need operator attention; pass
+     * `false` to exclude blocked instances.
+     *
+     * @param suspended Filter by instance-scope suspension. `true` → only instances with
+     * `suspendedAt` set; `false` → only running-and-not-paused. Omit for
+     * no filter. Does not consider definition-scope suspension; for a
+     * full "is this instance making progress?" view, callers should
+     * additionally join against the parent definition.
+     *
+     * @param createdAfter Only return instances created at or after this timestamp. Strongly
+     * recommended for monitoring views — terminal-state instance rows
+     * accumulate indefinitely, and unfiltered queries grow linearly with
+     * that history.
+     *
      * @param page
      * @param pageSize
      * @returns BpmnInstancePaginatedResponse OK
@@ -674,6 +690,9 @@ export class DefaultService {
         projectId: string,
         definitionId?: string,
         status?: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELED',
+        hasIncident?: boolean,
+        suspended?: boolean,
+        createdAfter?: string,
         page?: number,
         pageSize?: number,
     ): CancelablePromise<BpmnInstancePaginatedResponse> {
@@ -686,6 +705,9 @@ export class DefaultService {
             query: {
                 'definitionID': definitionId,
                 'status': status,
+                'hasIncident': hasIncident,
+                'suspended': suspended,
+                'createdAfter': createdAfter,
                 'page': page,
                 'pageSize': pageSize,
             },
@@ -719,6 +741,11 @@ export class DefaultService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                400: `Bad Request`,
+                401: `Unauthorized`,
+                500: `Internal Server Error`,
+            },
         });
     }
     /**

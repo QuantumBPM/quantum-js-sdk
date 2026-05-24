@@ -40,6 +40,21 @@ export interface PageOptions {
 export interface InstanceListOptions extends PageOptions {
     definitionId?: string;
     status?: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELED';
+    /**
+     * Filter by incident presence. `true` shows only instances that
+     * need operator attention; `false` excludes them; omit for all.
+     */
+    hasIncident?: boolean;
+    /**
+     * Filter by suspension state. `true` shows only suspended
+     * instances; `false` excludes them; omit for all.
+     */
+    suspended?: boolean;
+    /**
+     * Lower bound on the instance's createdAt timestamp (RFC 3339).
+     * Useful for incremental pagination over recent activity.
+     */
+    createdAfter?: string;
 }
 
 export interface UserTaskListOptions extends PageOptions {
@@ -172,10 +187,16 @@ export class BpmnClient {
 
     /** Page of instances in the project. */
     async listInstances(opts: InstanceListOptions = {}): Promise<BpmnInstancePaginatedResponse> {
+        // Generated signature order: (projectId, definitionId, status,
+        // hasIncident, suspended, createdAfter, page, pageSize). Positional
+        // call — keep the order in sync with the regenerated client.
         return this.raw.default.listBpmnInstances(
             this.projectId,
             opts.definitionId,
             opts.status,
+            opts.hasIncident,
+            opts.suspended,
+            opts.createdAfter,
             opts.page,
             opts.pageSize,
         );

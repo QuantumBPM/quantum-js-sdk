@@ -42,5 +42,21 @@ export type BpmnProcessVersion = {
      * All instances of this version across statuses.
      */
     totalCount: number;
+    /**
+     * Timestamp at which this definition was paused. While set, the start
+     * endpoint rejects new instances of this definition with 409, and every
+     * already-running instance was sent a definition-scope suspend signal.
+     * Empty when active.
+     *
+     */
+    suspendedAt?: string;
+    /**
+     * Operator who suspended this definition. Empty when active.
+     */
+    suspendedBy?: string;
+    /**
+     * Free-text reason captured at suspend time.
+     */
+    suspendReason?: string;
 };
 

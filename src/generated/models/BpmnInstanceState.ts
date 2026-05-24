@@ -3,8 +3,8 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ActiveScope } from './ActiveScope';
-import type { BpmnActivityState } from './BpmnActivityState';
 import type { BpmnIncident } from './BpmnIncident';
+import type { SuspensionEntry } from './SuspensionEntry';
 /**
  * Full runtime state of a BPMN process instance.
  */
@@ -22,6 +22,14 @@ export type BpmnInstanceState = {
      */
     parentWorkflowID?: string;
     /**
+     * BPMN process definition ID this instance was started from.
+     */
+    processId?: string;
+    /**
+     * Version of the BPMN process definition this instance is currently running. Updated by migration operations.
+     */
+    processVersion?: number;
+    /**
      * Current lifecycle status of the instance (e.g. RUNNING, COMPLETED, FAILED, TERMINATED).
      */
     status?: string;
@@ -29,10 +37,6 @@ export type BpmnInstanceState = {
      * All variables currently in scope for the root process.
      */
     variables?: Record<string, any>;
-    /**
-     * Ordered list of activity execution records.
-     */
-    history?: Array<BpmnActivityState>;
     /**
      * True when the instance has an unresolved incident.
      */
@@ -49,5 +53,20 @@ export type BpmnInstanceState = {
      * Error message from the workflow when status is FAILED.
      */
     failureReason?: string;
+    /**
+     * Present when this instance has been explicitly suspended by an
+     * operator. Persisted across CaN rotations. Clear via the resume
+     * instance endpoint. Composes with `definitionSuspension` — both must
+     * be null for the instance to dispatch tokens.
+     *
+     */
+    instanceSuspension?: SuspensionEntry;
+    /**
+     * Present when the instance's process definition has been suspended.
+     * Clear via the resume definition endpoint (the backend fans out to
+     * every running instance of the definition).
+     *
+     */
+    definitionSuspension?: SuspensionEntry;
 };
 
