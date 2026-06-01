@@ -922,6 +922,7 @@ export class BpmnService {
      * @param assignee
      * @param candidateUser
      * @param candidateGroup
+     * @param businessId Exact-match filter on the caller-supplied correlation key.
      * @param page
      * @param pageSize
      * @returns BpmnUserTaskPaginatedResponse OK
@@ -934,6 +935,7 @@ export class BpmnService {
         assignee?: string,
         candidateUser?: string,
         candidateGroup?: string,
+        businessId?: string,
         page?: number,
         pageSize?: number,
     ): CancelablePromise<BpmnUserTaskPaginatedResponse> {
@@ -949,6 +951,7 @@ export class BpmnService {
                 'assignee': assignee,
                 'candidateUser': candidateUser,
                 'candidateGroup': candidateGroup,
+                'businessId': businessId,
                 'page': page,
                 'pageSize': pageSize,
             },

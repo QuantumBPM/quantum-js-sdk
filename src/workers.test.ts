@@ -1,5 +1,7 @@
-import { Worker } from './workers';
+import { Worker, Job } from './workers';
 import { RawClient } from './generated/RawClient';
+import { Vars } from './variables';
+import type { ExternalJob } from './generated';
 
 function makeWorker(maxBytes?: number) {
     const warnings: string[] = [];
@@ -47,5 +49,69 @@ describe('Worker.clampWorkerErrorMessage', () => {
         // Round-trip through Buffer should be lossless if we cut on a boundary.
         expect(Buffer.from(out, 'utf8').toString('utf8')).toBe(out);
         expect(out).not.toContain('�');
+    });
+});
+
+describe('Worker job dispatch', () => {
+    function setupForDispatch() {
+        const raw = {
+            default: {
+                heartbeatBpmnExternalJob: async () => {},
+                completeBpmnExternalJob: async () => {},
+            },
+            bpmn: {
+                throwBpmnExternalJobError: async () => {},
+            },
+        } as unknown as RawClient;
+        const w = new Worker(raw, '00000000-0000-0000-0000-000000000001', {
+            logger: { error: () => {}, warn: () => {} },
+        });
+        return w;
+    }
+
+    function makeRaw(businessId?: string): ExternalJob {
+        return {
+            id: '11111111-1111-1111-1111-111111111111',
+            executionKey: 'wf-1:node-a:1',
+            workflowID: 'wf-1',
+            nodeID: 'node-a',
+            taskType: 'payment',
+            status: 'PENDING',
+            createdAt: new Date().toISOString(),
+            ...(businessId !== undefined ? { businessId } : {}),
+        } as unknown as ExternalJob;
+    }
+
+    test('Job exposes businessId from the poll response', async () => {
+        const w = setupForDispatch();
+        let received: Job | undefined;
+        w.handle('payment', async (job) => {
+            received = job;
+            return new Vars();
+        });
+
+        const registration = (w as any).registrations.get('payment');
+        const ac = new AbortController();
+        await (w as any).dispatch(registration, makeRaw('ORDER-42'), ac.signal);
+
+        expect(received).toBeDefined();
+        expect(received!.businessId).toBe('ORDER-42');
+        expect(received!.raw.businessId).toBe('ORDER-42');
+    });
+
+    test('businessId is undefined when the poll response omits it', async () => {
+        const w = setupForDispatch();
+        let received: Job | undefined;
+        w.handle('payment', async (job) => {
+            received = job;
+            return new Vars();
+        });
+
+        const registration = (w as any).registrations.get('payment');
+        const ac = new AbortController();
+        await (w as any).dispatch(registration, makeRaw(), ac.signal);
+
+        expect(received).toBeDefined();
+        expect(received!.businessId).toBeUndefined();
     });
 });

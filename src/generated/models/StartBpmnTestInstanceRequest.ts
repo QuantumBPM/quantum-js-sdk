@@ -14,5 +14,9 @@ export type StartBpmnTestInstanceRequest = {
      * Initial process variables.
      */
     variables?: Record<string, any>;
+    /**
+     * Optional caller-supplied correlation key.
+     */
+    businessId?: string;
 };
 

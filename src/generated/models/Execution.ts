@@ -30,5 +30,9 @@ export type Execution = {
      * The DMN XML's `<definitions id="…">` value, useful for grouping executions across versions.
      */
     definitionsID?: string;
+    /**
+     * Caller-supplied correlation key passed at evaluation time (REST) or inherited from the parent BPMN process (business rule task).
+     */
+    businessId?: string;
 };
 

@@ -55,6 +55,11 @@ export interface InstanceListOptions extends PageOptions {
      * Useful for incremental pagination over recent activity.
      */
     createdAfter?: string;
+    /**
+     * Exact-match filter on the caller-supplied correlation key set
+     * at startInstance time.
+     */
+    businessId?: string;
 }
 
 export interface UserTaskListOptions extends PageOptions {
@@ -63,6 +68,20 @@ export interface UserTaskListOptions extends PageOptions {
     assignee?: string;
     candidateUser?: string;
     candidateGroup?: string;
+    /**
+     * Exact-match filter on the originating instance's
+     * caller-supplied correlation key.
+     */
+    businessId?: string;
+}
+
+export interface StartInstanceOptions {
+    /**
+     * Caller-supplied correlation key (order number, ticket ID, etc.).
+     * Stamped on every child instance, external job, user task, and
+     * DMN execution emitted by the resulting process.
+     */
+    businessId?: string;
 }
 
 export interface ProcessListOptions extends PageOptions {
@@ -130,10 +149,11 @@ export class BpmnClient {
     }
 
     /** Start a non-deployed instance against a draft for testing. */
-    async startTestInstance(resourceId: string, vars: Vars, processId?: string): Promise<string> {
+    async startTestInstance(resourceId: string, vars: Vars, processId?: string, opts: StartInstanceOptions = {}): Promise<string> {
         const resp = await this.raw.bpmn.startBpmnTestInstance(this.projectId, resourceId, {
             processID: processId,
             variables: vars.toWireMap() as any,
+            businessId: opts.businessId,
         });
         if (!resp.workflowID) {
             throw new Error('bpmn: startTestInstance returned no workflowID');
@@ -164,10 +184,11 @@ export class BpmnClient {
     // --- Instances ----------------------------------------------------------
 
     /** Launch a new instance. Returns the workflowID. */
-    async startInstance(processDefinitionId: string, vars: Vars): Promise<string> {
+    async startInstance(processDefinitionId: string, vars: Vars, opts: StartInstanceOptions = {}): Promise<string> {
         const resp = await this.raw.default.startBpmnInstance(this.projectId, {
             processDefinitionID: processDefinitionId,
             variables: vars.toWireMap() as any,
+            businessId: opts.businessId,
         });
         if (!resp.workflowID) {
             throw new Error('bpmn: startInstance returned no workflowID');
@@ -188,8 +209,8 @@ export class BpmnClient {
     /** Page of instances in the project. */
     async listInstances(opts: InstanceListOptions = {}): Promise<BpmnInstancePaginatedResponse> {
         // Generated signature order: (projectId, definitionId, status,
-        // hasIncident, suspended, createdAfter, page, pageSize). Positional
-        // call — keep the order in sync with the regenerated client.
+        // hasIncident, suspended, createdAfter, businessId, page, pageSize).
+        // Positional call — keep the order in sync with the regenerated client.
         return this.raw.default.listBpmnInstances(
             this.projectId,
             opts.definitionId,
@@ -197,6 +218,7 @@ export class BpmnClient {
             opts.hasIncident,
             opts.suspended,
             opts.createdAfter,
+            opts.businessId,
             opts.page,
             opts.pageSize,
         );
@@ -256,6 +278,7 @@ export class BpmnClient {
             opts.assignee,
             opts.candidateUser,
             opts.candidateGroup,
+            opts.businessId,
             opts.page,
             opts.pageSize,
         );

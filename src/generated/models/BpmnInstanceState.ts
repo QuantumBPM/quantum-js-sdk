@@ -68,5 +68,9 @@ export type BpmnInstanceState = {
      *
      */
     definitionSuspension?: SuspensionEntry;
+    /**
+     * Caller-supplied correlation key set when the instance was started.
+     */
+    businessId?: string;
 };
 

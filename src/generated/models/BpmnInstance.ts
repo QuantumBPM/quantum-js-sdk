@@ -54,6 +54,10 @@ export type BpmnInstance = {
      * Free-text reason captured at suspend time.
      */
     suspendReason?: string;
+    /**
+     * Caller-supplied correlation key set when the instance was started. Inherited unchanged on child instances spawned via CallActivity.
+     */
+    businessId?: string;
 };
 export namespace BpmnInstance {
     /**

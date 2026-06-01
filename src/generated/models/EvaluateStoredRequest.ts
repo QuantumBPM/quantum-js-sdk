@@ -20,5 +20,9 @@ export type EvaluateStoredRequest = {
      * Names of decisions or decision services to evaluate. If empty, all decisions are evaluated.
      */
     decisions?: Array<string>;
+    /**
+     * Optional caller-supplied correlation key persisted with the resulting execution row for cross-system tracing.
+     */
+    businessId?: string;
 };
 

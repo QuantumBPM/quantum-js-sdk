@@ -18,6 +18,11 @@ export interface EvaluateOptions {
     decisions?: string[];
     /** Restrict evaluation to the named decision services. */
     decisionServices?: string[];
+    /**
+     * Caller-supplied correlation key persisted with the resulting
+     * execution row for cross-system tracing.
+     */
+    businessId?: string;
 }
 
 /** Options for ad-hoc DMN evaluations. */
@@ -55,6 +60,7 @@ export class DmnClient {
                 version: opts.version,
                 decisions: opts.decisions,
                 decisionServices: opts.decisionServices,
+                businessId: opts.businessId,
             },
             opts.version,
         );
@@ -75,6 +81,7 @@ export class DmnClient {
             version: opts.version,
             decisions: opts.decisions,
             decisionServices: opts.decisionServices,
+            businessId: opts.businessId,
         });
     }
 

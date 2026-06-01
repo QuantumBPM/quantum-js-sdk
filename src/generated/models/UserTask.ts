@@ -82,6 +82,10 @@ export type UserTask = {
      * Timestamp when the task reached a terminal status.
      */
     completedAt?: string;
+    /**
+     * Caller-supplied correlation key inherited from the parent BPMN process.
+     */
+    businessId?: string;
 };
 export namespace UserTask {
     /**

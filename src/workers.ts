@@ -38,6 +38,12 @@ export interface Job<TVars = Record<string, unknown>> {
     typed: TVars;
     /** Static metadata attached at design time on the service task. */
     headers: Record<string, string>;
+    /**
+     * Caller-supplied correlation key inherited from the originating BPMN
+     * process. Undefined when the instance was started without one. Use it
+     * for log correlation or downstream tracing.
+     */
+    businessId?: string;
     /** Underlying generated record for low-level access. */
     raw: ExternalJob;
 }
@@ -202,6 +208,7 @@ export class Worker {
             vars,
             typed: vars.toRecord(),
             headers: raw.headers ?? {},
+            businessId: raw.businessId,
             raw,
         };
 

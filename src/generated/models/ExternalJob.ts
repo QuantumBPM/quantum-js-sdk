@@ -66,6 +66,10 @@ export type ExternalJob = {
      * Best-effort label describing why a CANCELED job was interrupted (e.g. instance cancelled, instance terminated).
      */
     cancelReason?: string;
+    /**
+     * Caller-supplied correlation key inherited from the parent BPMN process. Workers can use it for log correlation or downstream tracing.
+     */
+    businessId?: string;
 };
 export namespace ExternalJob {
     /**

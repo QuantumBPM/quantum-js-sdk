@@ -531,6 +531,7 @@ export class DefaultService {
      * @param definitionId
      * @param definitionsId Filter by DMN `<definitions id>` (XML id).
      * @param startDate Filter executions after this date (ISO 8601)
+     * @param businessId Exact-match filter on the caller-supplied correlation key.
      * @param page Page number (1-indexed)
      * @param pageSize Number of items per page (max 100)
      * @returns PaginatedExecutionsResponse OK
@@ -541,6 +542,7 @@ export class DefaultService {
         definitionId: string,
         definitionsId?: string,
         startDate?: string,
+        businessId?: string,
         page: number = 1,
         pageSize: number = 20,
     ): CancelablePromise<PaginatedExecutionsResponse> {
@@ -554,6 +556,7 @@ export class DefaultService {
             query: {
                 'definitionsID': definitionsId,
                 'startDate': startDate,
+                'businessId': businessId,
                 'page': page,
                 'pageSize': pageSize,
             },
@@ -604,6 +607,7 @@ export class DefaultService {
      * Returns paginated execution history for the entire project, optionally filtered by DMN definition.
      * @param projectId
      * @param definitionsId Filter by DMN `<definitions id>` (XML id).
+     * @param businessId Exact-match filter on the caller-supplied correlation key.
      * @param page Page number (1-indexed)
      * @param pageSize Number of items per page (max 100)
      * @returns PaginatedExecutionsResponse OK
@@ -612,6 +616,7 @@ export class DefaultService {
     public listProjectExecutions(
         projectId: string,
         definitionsId?: string,
+        businessId?: string,
         page: number = 1,
         pageSize: number = 20,
     ): CancelablePromise<PaginatedExecutionsResponse> {
@@ -623,6 +628,7 @@ export class DefaultService {
             },
             query: {
                 'definitionsID': definitionsId,
+                'businessId': businessId,
                 'page': page,
                 'pageSize': pageSize,
             },
@@ -681,6 +687,7 @@ export class DefaultService {
      * accumulate indefinitely, and unfiltered queries grow linearly with
      * that history.
      *
+     * @param businessId Exact-match filter on the caller-supplied correlation key set at start time.
      * @param page
      * @param pageSize
      * @returns BpmnInstancePaginatedResponse OK
@@ -693,6 +700,7 @@ export class DefaultService {
         hasIncident?: boolean,
         suspended?: boolean,
         createdAfter?: string,
+        businessId?: string,
         page?: number,
         pageSize?: number,
     ): CancelablePromise<BpmnInstancePaginatedResponse> {
@@ -708,6 +716,7 @@ export class DefaultService {
                 'hasIncident': hasIncident,
                 'suspended': suspended,
                 'createdAfter': createdAfter,
+                'businessId': businessId,
                 'page': page,
                 'pageSize': pageSize,
             },
@@ -809,6 +818,7 @@ export class DefaultService {
      * @param taskType Filter jobs by task type
      * @param status Filter jobs by status
      * @param workflowId Filter jobs by workflow ID
+     * @param businessId Exact-match filter on the caller-supplied correlation key.
      * @param createdAfter Only return jobs created at or after this timestamp. Strongly
      * recommended for monitoring views — completed-job records accumulate
      * indefinitely, and unfiltered queries grow linearly with that history.
@@ -823,6 +833,7 @@ export class DefaultService {
         taskType?: string,
         status?: 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELED',
         workflowId?: string,
+        businessId?: string,
         createdAfter?: string,
         page?: number,
         pageSize?: number,
@@ -837,6 +848,7 @@ export class DefaultService {
                 'taskType': taskType,
                 'status': status,
                 'workflowID': workflowId,
+                'businessId': businessId,
                 'createdAfter': createdAfter,
                 'page': page,
                 'pageSize': pageSize,
