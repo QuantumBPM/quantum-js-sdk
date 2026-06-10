@@ -6,8 +6,11 @@
  */
 import { hostname } from 'os';
 
+import { context as otelContext, SpanStatusCode } from '@opentelemetry/api';
+
 import { RawClient } from './generated/RawClient';
 import { ExternalJob } from './generated/models/ExternalJob';
+import { startJobSpan } from './tracing';
 
 import { Vars } from './variables';
 
@@ -212,19 +215,29 @@ export class Worker {
             raw,
         };
 
+        const { ctx: spanCtx, span } = startJobSpan(raw, r.taskType);
+
         try {
-            const result = await r.handler(job, ac.signal);
-            await this.complete(raw, result ?? new Vars());
+            // Run the handler (and the success-path complete) under the span so
+            // the user's own OpenTelemetry work nests beneath it.
+            await otelContext.with(spanCtx, async () => {
+                const result = await r.handler(job, ac.signal);
+                await this.complete(raw, result ?? new Vars());
+            });
         } catch (err) {
             if (err instanceof BpmnError) {
+                span.setAttribute('bpmn.error_code', err.code);
                 await this.throwError(raw, err.code, err.variables ?? new Vars());
             } else {
                 this.logger.error(`workers: handler ${r.taskType}`, err);
                 const message = err instanceof Error ? err.message : String(err);
+                if (err instanceof Error) span.recordException(err);
+                span.setStatus({ code: SpanStatusCode.ERROR, message });
                 const clamped = this.clampWorkerErrorMessage(r.taskType, message);
                 await this.throwError(raw, 'WORKER_ERROR', new Vars().set('error', clamped));
             }
         } finally {
+            span.end();
             clearInterval(heartbeatTimer);
             parentSignal.removeEventListener('abort', onAbort);
             ac.abort();
