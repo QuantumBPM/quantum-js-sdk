@@ -13,7 +13,6 @@ import type { BpmnUserTaskPaginatedResponse } from '../models/BpmnUserTaskPagina
 import type { BpmnValidateResponse } from '../models/BpmnValidateResponse';
 import type { CorrelationKeys } from '../models/CorrelationKeys';
 import type { CreateBpmnResourceRequest } from '../models/CreateBpmnResourceRequest';
-import type { ExternalJobActiveWorkersResponse } from '../models/ExternalJobActiveWorkersResponse';
 import type { ExternalJobBatchResponse } from '../models/ExternalJobBatchResponse';
 import type { ExternalJobQueueDepthResponse } from '../models/ExternalJobQueueDepthResponse';
 import type { MigrateBpmnInstanceRequest } from '../models/MigrateBpmnInstanceRequest';
@@ -789,27 +788,6 @@ export class BpmnService {
             },
             query: {
                 'createdAfter': createdAfter,
-            },
-        });
-    }
-    /**
-     * Live count of long-poll workers grouped by taskType
-     * Returns the count of workers currently long-polling for each `taskType`.
-     * Reflects only currently-connected workers; long-polls that have timed out
-     * or disconnected are not counted.
-     *
-     * @param projectId
-     * @returns ExternalJobActiveWorkersResponse OK
-     * @throws ApiError
-     */
-    public getBpmnExternalJobsActiveWorkers(
-        projectId: string,
-    ): CancelablePromise<ExternalJobActiveWorkersResponse> {
-        return this.httpRequest.request({
-            method: 'GET',
-            url: '/projects/{projectID}/bpmn/external-jobs/workers',
-            path: {
-                'projectID': projectId,
             },
         });
     }

@@ -51,8 +51,6 @@ export type { EvaluateStoredRequest } from './models/EvaluateStoredRequest';
 export { EvaluationResult } from './models/EvaluationResult';
 export type { Execution } from './models/Execution';
 export { ExternalJob } from './models/ExternalJob';
-export type { ExternalJobActiveWorkersItem } from './models/ExternalJobActiveWorkersItem';
-export type { ExternalJobActiveWorkersResponse } from './models/ExternalJobActiveWorkersResponse';
 export type { ExternalJobBatchResponse } from './models/ExternalJobBatchResponse';
 export type { ExternalJobQueueDepthItem } from './models/ExternalJobQueueDepthItem';
 export type { ExternalJobQueueDepthResponse } from './models/ExternalJobQueueDepthResponse';
