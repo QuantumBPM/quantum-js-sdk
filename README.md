@@ -303,6 +303,12 @@ const loan = v.as<Loan>();
 
 `get<T>` and `as<T>` are TypeScript hints — no runtime validation. Combine with a runtime validator (e.g. Zod) at boundaries when you need it.
 
+### Number precision
+
+FEEL numbers are exact decimals server-side, but this SDK deserializes JSON with `JSON.parse`, so numbers arrive as IEEE-754 doubles (~15–17 significant digits). Values beyond double precision — e.g. `1234567890.123456789012345678` — are silently rounded on receipt, and echoing them back sends the rounded value. This is a JavaScript platform limitation; the Go, Java, and Python SDKs preserve exact decimals.
+
+If you need currency-grade round-trips through a JS worker or client, represent those values as FEEL **strings** in your processes and convert with a decimal library (e.g. `decimal.js`, `big.js`) at the edges.
+
 ## Escape hatch
 
 The `client.raw` property exposes the underlying generated client for endpoints not yet wrapped (instance migration, modification, ad-hoc triggers, batch job complete/error, etc.):

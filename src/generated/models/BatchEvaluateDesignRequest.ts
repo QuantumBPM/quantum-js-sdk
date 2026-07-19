@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { FeelContext } from './FeelContext';
 /**
  * Payload for batch evaluating ad-hoc DMN XML against multiple input rows.
  */
@@ -13,6 +14,6 @@ export type BatchEvaluateDesignRequest = {
     /**
      * One input context per row to evaluate.
      */
-    inputs?: Array<Record<string, any>>;
+    inputs?: Array<FeelContext>;
 };
 
