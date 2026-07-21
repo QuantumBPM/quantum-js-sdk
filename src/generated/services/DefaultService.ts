@@ -27,19 +27,6 @@ import type { BaseHttpRequest } from '../core/BaseHttpRequest';
 export class DefaultService {
     constructor(public readonly httpRequest: BaseHttpRequest) {}
     /**
-     * Health Check
-     * @returns any OK
-     * @throws ApiError
-     */
-    public getHealth(): CancelablePromise<{
-        status?: string;
-    }> {
-        return this.httpRequest.request({
-            method: 'GET',
-            url: '/health',
-        });
-    }
-    /**
      * Version
      * @returns any OK
      * @throws ApiError
