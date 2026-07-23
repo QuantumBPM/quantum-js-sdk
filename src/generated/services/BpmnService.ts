@@ -809,6 +809,15 @@ export class BpmnService {
         executionKey: string,
         requestBody: {
             errorCode: string;
+            /**
+             * Optional worker identity (the same `clientID` used to poll).
+             * When supplied, the error is applied only if this worker still
+             * holds the job's lock, so a stale report can't requeue or fail
+             * a job a peer is actively holding. Omit for the legacy
+             * unchecked behavior.
+             *
+             */
+            clientID?: string;
             variables?: Record<string, any>;
         },
     ): CancelablePromise<any> {
@@ -837,6 +846,15 @@ export class BpmnService {
     public completeBpmnExternalJobsBatch(
         projectId: string,
         requestBody: {
+            /**
+             * Optional worker identity (the same `clientID` used to poll)
+             * applied to every item in the batch — a batch is one worker's
+             * report. When supplied, an item is completed only if this
+             * worker still holds its lock; items re-acquired by a peer drop
+             * out silently. Omit for the legacy unchecked behavior.
+             *
+             */
+            clientID?: string;
             items: Array<{
                 executionKey: string;
                 workflowID: string;
@@ -870,6 +888,16 @@ export class BpmnService {
     public throwBpmnExternalJobErrorsBatch(
         projectId: string,
         requestBody: {
+            /**
+             * Optional worker identity (the same `clientID` used to poll)
+             * applied to every item in the batch — a batch is one worker's
+             * report. When supplied, an item is requeued/failed only if this
+             * worker still holds its lock; items held by a peer are reported
+             * as an error and left untouched. Omit for the legacy unchecked
+             * behavior.
+             *
+             */
+            clientID?: string;
             items: Array<{
                 executionKey: string;
                 workflowID: string;

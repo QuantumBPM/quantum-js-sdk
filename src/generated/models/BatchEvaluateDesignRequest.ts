@@ -12,7 +12,7 @@ export type BatchEvaluateDesignRequest = {
      */
     xml?: string;
     /**
-     * One input context per row to evaluate.
+     * One input context per row to evaluate. At most 500 rows per request.
      */
     inputs?: Array<FeelContext>;
 };

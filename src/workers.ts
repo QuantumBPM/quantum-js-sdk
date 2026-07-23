@@ -265,6 +265,7 @@ export class Worker {
         try {
             await this.raw.default.completeBpmnExternalJob(this.projectId, job.executionKey, {
                 workflowID: job.workflowID,
+                clientID: this.clientId,
                 variables: vars.toWireMap() as any,
             });
         } catch (err) {
@@ -276,6 +277,7 @@ export class Worker {
         try {
             await this.raw.bpmn.throwBpmnExternalJobError(this.projectId, job.executionKey, {
                 errorCode: code,
+                clientID: this.clientId,
                 variables: vars.toWireMap() as any,
             });
         } catch (err) {

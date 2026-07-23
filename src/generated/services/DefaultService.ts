@@ -928,6 +928,15 @@ export class DefaultService {
              * Workflow ID returned by the poll response.
              */
             workflowID: string;
+            /**
+             * Optional worker identity (the same `clientID` used to poll).
+             * When supplied, the completion is applied only if this worker
+             * still holds the job's lock; a stale worker whose lease lapsed
+             * and whose job a peer re-acquired is rejected as a no-op.
+             * Omit for the legacy unchecked behavior.
+             *
+             */
+            clientID?: string;
             variables?: Record<string, any>;
         },
     ): CancelablePromise<any> {
