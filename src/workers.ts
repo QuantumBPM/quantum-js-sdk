@@ -54,9 +54,13 @@ export interface Job<TVars = Record<string, unknown>> {
 /**
  * Handler return value semantics:
  *   - resolves with Vars (or undefined) → SDK calls Complete
- *   - rejects with a BpmnError           → SDK calls ThrowError with that code
+ *   - rejects with a BpmnError           → SDK calls ThrowError with that code as
+ *                                          a business error (retryable=false):
+ *                                          routed to a matching boundary error
+ *                                          event immediately, bypassing retries
  *   - rejects with anything else         → SDK calls ThrowError with WORKER_ERROR
- *                                          and decrements the retry budget
+ *                                          as a retryable technical failure; the
+ *                                          retry budget is consumed first
  */
 export type Handler<TVars = Record<string, unknown>> = (
     job: Job<TVars>,
@@ -227,14 +231,18 @@ export class Worker {
         } catch (err) {
             if (err instanceof BpmnError) {
                 span.setAttribute('bpmn.error_code', err.code);
-                await this.throwError(raw, err.code, err.variables ?? new Vars());
+                // Business outcome: route to the boundary immediately
+                // (retryable=false), bypassing the retry budget.
+                await this.throwError(raw, err.code, err.variables ?? new Vars(), false);
             } else {
                 this.logger.error(`workers: handler ${r.taskType}`, err);
                 const message = err instanceof Error ? err.message : String(err);
                 if (err instanceof Error) span.recordException(err);
                 span.setStatus({ code: SpanStatusCode.ERROR, message });
                 const clamped = this.clampWorkerErrorMessage(r.taskType, message);
-                await this.throwError(raw, 'WORKER_ERROR', new Vars().set('error', clamped));
+                // Technical failure: retryable, so the server consumes the
+                // retry budget before surfacing it.
+                await this.throwError(raw, 'WORKER_ERROR', new Vars().set('error', clamped), true);
             }
         } finally {
             span.end();
@@ -273,11 +281,12 @@ export class Worker {
         }
     }
 
-    private async throwError(job: ExternalJob, code: string, vars: Vars): Promise<void> {
+    private async throwError(job: ExternalJob, code: string, vars: Vars, retryable: boolean): Promise<void> {
         try {
             await this.raw.bpmn.throwBpmnExternalJobError(this.projectId, job.executionKey, {
                 errorCode: code,
                 clientID: this.clientId,
+                retryable,
                 variables: vars.toWireMap() as any,
             });
         } catch (err) {
