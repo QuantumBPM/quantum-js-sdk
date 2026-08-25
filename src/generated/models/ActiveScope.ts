@@ -19,9 +19,9 @@ export type ActiveScope = {
      */
     nodeID?: string;
     /**
-     * IDs of flow nodes that currently hold live tokens within this scope.
+     * Live token count per flow node in this scope, keyed by node ID. A node can hold more than one token at a time (a parallel fork whose branches re-converge without a join, a non-interrupting boundary handler, a loop edge re-entering a node a prior token has not left yet), so the count matters: a presence-only list cannot tell one token from five. Absent keys mean no live token.
      */
-    activeNodes?: Array<string>;
+    activeNodes?: Record<string, number>;
     /**
      * Version of the process definition active in this scope.
      */

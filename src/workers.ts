@@ -17,7 +17,7 @@ import { Vars } from './variables';
 /**
  * Throw this from a handler to fail the job with a BPMN error code.
  * The runtime translates it into a ThrowError call against the originating
- * service task — matching boundary error events on the task can then route
+ * service task - matching boundary error events on the task can then route
  * the exception in the BPMN model.
  */
 export class BpmnError extends Error {
@@ -33,7 +33,7 @@ export interface Job<TVars = Record<string, unknown>> {
     executionKey: string;
     /** Workflow ID of the originating instance. */
     workflowId: string;
-    /** Worker selector — the task type the handler was registered for. */
+    /** Worker selector - the task type the handler was registered for. */
     taskType: string;
     /** Input variables resolved by the service task at activity entry. */
     vars: Vars;
@@ -70,7 +70,7 @@ export type Handler<TVars = Record<string, unknown>> = (
 export interface HandleOptions {
     /** Maximum jobs in flight for this task type. Default 1. */
     maxJobs?: number;
-    /** Long-poll wait — duration string like "30s", "2m". Default "30s". */
+    /** Long-poll wait - duration string like "30s", "2m". Default "30s". */
     pollTimeout?: string;
     /** Exclusive lock duration on each acquired job. Default "30s". */
     lockDuration?: string;

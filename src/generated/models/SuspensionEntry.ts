@@ -4,7 +4,7 @@
 /* eslint-disable */
 /**
  * Audit-shaped record of an active suspension at one scope (instance or
- * definition). Returned inline on `BpmnInstanceState` — `null` when not
+ * definition). Returned inline on `BpmnInstanceState` - `null` when not
  * suspended at that scope. An instance is "effectively suspended" if either
  * scope's entry is present; the dispatcher pauses forward token dispatch
  * while either flag is set.

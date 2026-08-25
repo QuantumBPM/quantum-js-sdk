@@ -98,18 +98,18 @@ export interface MessageOptions {
      * with no correlation requirement.
      */
     correlationKeys?: CorrelationKeys;
-    /** Buffered message lifetime — ISO 8601 duration, Go duration, or RFC 3339 timestamp. */
+    /** Buffered message lifetime - ISO 8601 duration, Go duration, or RFC 3339 timestamp. */
     ttl?: string;
 }
 
 export interface SignalOptions {
-    /** Buffered signal lifetime — see MessageOptions.ttl. */
+    /** Buffered signal lifetime - see MessageOptions.ttl. */
     ttl?: string;
 }
 
 /**
- * BpmnClient covers the BPMN runtime endpoints — resources, instances,
- * messaging, user tasks, and process discovery — for a single project.
+ * BpmnClient covers the BPMN runtime endpoints - resources, instances,
+ * messaging, user tasks, and process discovery - for a single project.
  */
 export class BpmnClient {
     constructor(
@@ -210,7 +210,7 @@ export class BpmnClient {
     async listInstances(opts: InstanceListOptions = {}): Promise<BpmnInstancePaginatedResponse> {
         // Generated signature order: (projectId, definitionId, status,
         // hasIncident, suspended, createdAfter, businessId, page, pageSize).
-        // Positional call — keep the order in sync with the regenerated client.
+        // Positional call - keep the order in sync with the regenerated client.
         return this.raw.default.listBpmnInstances(
             this.projectId,
             opts.definitionId,

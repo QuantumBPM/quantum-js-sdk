@@ -595,6 +595,7 @@ export class DefaultService {
      * @param projectId
      * @param definitionsId Filter by DMN `<definitions id>` (XML id).
      * @param businessId Exact-match filter on the caller-supplied correlation key.
+     * @param startDate Only return executions at or after this instant (ISO 8601). Bounds the scan and the reported total; omit for the full unbounded history.
      * @param page Page number (1-indexed)
      * @param pageSize Number of items per page (max 100)
      * @returns PaginatedExecutionsResponse OK
@@ -604,6 +605,7 @@ export class DefaultService {
         projectId: string,
         definitionsId?: string,
         businessId?: string,
+        startDate?: string,
         page: number = 1,
         pageSize: number = 20,
     ): CancelablePromise<PaginatedExecutionsResponse> {
@@ -616,6 +618,7 @@ export class DefaultService {
             query: {
                 'definitionsID': definitionsId,
                 'businessId': businessId,
+                'startDate': startDate,
                 'page': page,
                 'pageSize': pageSize,
             },
@@ -663,14 +666,15 @@ export class DefaultService {
      * `true` to show only instances that need operator attention; pass
      * `false` to exclude blocked instances.
      *
-     * @param suspended Filter by instance-scope suspension. `true` → only instances with
-     * `suspendedAt` set; `false` → only running-and-not-paused. Omit for
-     * no filter. Does not consider definition-scope suspension; for a
-     * full "is this instance making progress?" view, callers should
-     * additionally join against the parent definition.
+     * @param suspended Filter by effective suspension - either scope counts. `true` → only
+     * instances paused at instance scope (`suspendedAt` set) or whose
+     * definition is paused (`definitionSuspended`); `false` → only
+     * instances paused at neither scope. Omit for no filter. Read those
+     * two row fields to tell the scopes apart; resume acts on one scope
+     * at a time.
      *
      * @param createdAfter Only return instances created at or after this timestamp. Strongly
-     * recommended for monitoring views — terminal-state instance rows
+     * recommended for monitoring views - terminal-state instance rows
      * accumulate indefinitely, and unfiltered queries grow linearly with
      * that history.
      *
@@ -712,7 +716,7 @@ export class DefaultService {
     /**
      * Start a BPMN process instance
      * Starts a new instance of a deployed BPMN process. The returned
-     * `workflowID` is the stable execution identifier — use it to fetch
+     * `workflowID` is the stable execution identifier - use it to fetch
      * state, send signals/messages, complete user tasks, etc.
      *
      * @param projectId
@@ -746,7 +750,7 @@ export class DefaultService {
     }
     /**
      * Get BPMN instance state
-     * Returns the full runtime state of a process instance — current variables,
+     * Returns the full runtime state of a process instance - current variables,
      * activity history, active scopes, and any unresolved incidents. Use this
      * to render dashboards or to drive operational decisions on a single
      * instance.
@@ -772,7 +776,7 @@ export class DefaultService {
     /**
      * Cancel a BPMN instance
      * Cancels a running instance and all of its active activities, jobs, and
-     * child instances. Cancellation is best-effort — handlers in flight may
+     * child instances. Cancellation is best-effort - handlers in flight may
      * still complete before the cancel propagates. Cancelled instances move
      * to status `CANCELED` and stop consuming further work.
      *
@@ -807,7 +811,7 @@ export class DefaultService {
      * @param workflowId Filter jobs by workflow ID
      * @param businessId Exact-match filter on the caller-supplied correlation key.
      * @param createdAfter Only return jobs created at or after this timestamp. Strongly
-     * recommended for monitoring views — completed-job records accumulate
+     * recommended for monitoring views - completed-job records accumulate
      * indefinitely, and unfiltered queries grow linearly with that history.
      *
      * @param page
@@ -847,7 +851,7 @@ export class DefaultService {
      * Long-polls for PENDING jobs of a given `taskType`. Returns a batch of
      * jobs (up to `maxJobs`) as soon as any are available, or `204 No Content`
      * when the timeout elapses with no work. Each returned job is exclusively
-     * leased to the caller for `lockDuration` — call `Heartbeat` to extend
+     * leased to the caller for `lockDuration` - call `Heartbeat` to extend
      * the lock, then `Complete` or `ThrowError` to finalize.
      *
      * @param projectId

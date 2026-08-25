@@ -4,7 +4,7 @@
 /* eslint-disable */
 /**
  * Reassign a CREATED user task. All fields are optional but at least one
- * must be present. Fields are REPLACED atomically — pass the full set of
+ * must be present. Fields are REPLACED atomically - pass the full set of
  * candidateUsers / candidateGroups you want stored, not a delta.
  *
  */

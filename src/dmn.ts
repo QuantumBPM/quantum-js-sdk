@@ -44,7 +44,7 @@ export class DmnClient {
 
     /**
      * Run a stored DMN definition identified by its DMN XML
-     * `<definitions id="…">` value. This is the typical evaluation path —
+     * `<definitions id="…">` value. This is the typical evaluation path -
      * stable across versions, addressable from the BPMN model.
      */
     async evaluate(

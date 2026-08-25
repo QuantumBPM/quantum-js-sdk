@@ -126,7 +126,7 @@ export class BpmnService {
             body: requestBody,
             mediaType: 'application/json',
             errors: {
-                409: `Conflict — resource is already deployed`,
+                409: `Conflict - resource is already deployed`,
             },
         });
     }
@@ -153,7 +153,7 @@ export class BpmnService {
                 'resourceID': resourceId,
             },
             errors: {
-                409: `Conflict — resource has running instances`,
+                409: `Conflict - resource has running instances`,
             },
         });
     }
@@ -395,7 +395,7 @@ export class BpmnService {
     /**
      * Resolve an incident and retry the failed activity
      * Marks an incident as resolved and re-runs the activity that produced it.
-     * Optional `variables` are merged into the activity's scope before retry —
+     * Optional `variables` are merged into the activity's scope before retry -
      * use this to fix the input that caused the failure (e.g. correct a value
      * that triggered a FEEL evaluation error).
      *
@@ -439,7 +439,7 @@ export class BpmnService {
      *
      * @param projectId
      * @param definitionId Restrict to incidents on instances of a single process definition.
-     * @param workflowId Restrict to incidents on a single instance — useful for an instance-detail "all incidents ever raised here" view that includes resolved rows.
+     * @param workflowId Restrict to incidents on a single instance - useful for an instance-detail "all incidents ever raised here" view that includes resolved rows.
      * @param status Filter by lifecycle status. `open` returns unresolved incidents;
      * `resolved` returns only resolved ones. Omit to return both.
      *
@@ -456,7 +456,7 @@ export class BpmnService {
         definitionId?: string,
         workflowId?: string,
         status?: 'open' | 'resolved',
-        errorType?: 'BpmnError' | 'EscalationError' | 'CompensationError' | 'FeelError' | 'NoHandler' | 'GatewayNoMatch' | 'TimerResolution' | 'LinkNotFound' | 'MigrationError' | 'Unknown',
+        errorType?: 'BpmnError' | 'EscalationError' | 'CompensationError' | 'FeelError' | 'NoHandler' | 'GatewayNoMatch' | 'TimerResolution' | 'LinkNotFound' | 'MigrationError' | 'SubscriptionError' | 'RotationLimitError' | 'SnapshotSizeExceeded' | 'CallActivityCanceled' | 'ExternalRowRefreshError' | 'Unknown',
         since?: string,
         until?: string,
         page?: number,
@@ -637,7 +637,7 @@ export class BpmnService {
      * Suspend a BPMN instance
      * Pauses forward token dispatch on a single running instance. The
      * instance's lifecycle status stays RUNNING; an orthogonal `suspendedAt`
-     * flag layers on top. Idempotent — a second call against an already-
+     * flag layers on top. Idempotent - a second call against an already-
      * suspended instance is a no-op.
      *
      * While suspended: cancel / terminate / migrate / force-rotate / resolve-
@@ -705,7 +705,7 @@ export class BpmnService {
      * It then iterates over every running instance (`status='RUNNING'`) and
      * sends each one a definition-scope suspend signal via the engine API.
      * Instances that were also explicitly instance-suspended stay paused
-     * after a definition-scope resume — the operator must clear that scope
+     * after a definition-scope resume - the operator must clear that scope
      * too.
      *
      * Idempotent. The reason cascades to every affected instance's history
@@ -872,7 +872,7 @@ export class BpmnService {
         requestBody: {
             /**
              * Optional worker identity (the same `clientID` used to poll)
-             * applied to every item in the batch — a batch is one worker's
+             * applied to every item in the batch - a batch is one worker's
              * report. When supplied, an item is completed only if this
              * worker still holds its lock; items re-acquired by a peer drop
              * out silently. Omit for the legacy unchecked behavior.
@@ -917,7 +917,7 @@ export class BpmnService {
         requestBody: {
             /**
              * Optional worker identity (the same `clientID` used to poll)
-             * applied to every item in the batch — a batch is one worker's
+             * applied to every item in the batch - a batch is one worker's
              * report. When supplied, an item is requeued/failed only if this
              * worker still holds its lock; items held by a peer are reported
              * as an error and left untouched. Omit for the legacy unchecked
@@ -1033,7 +1033,7 @@ export class BpmnService {
      * Fetch a single user task by execution key. Allowed for callers with
      * Executor (or higher) role on the project, OR for callers who are the
      * task's assignee, listed in candidateUsers, or whose identity groups
-     * overlap candidateGroups — same access semantics as Complete and Error.
+     * overlap candidateGroups - same access semantics as Complete and Error.
      *
      * @param projectId
      * @param executionKey
@@ -1052,7 +1052,7 @@ export class BpmnService {
                 'executionKey': executionKey,
             },
             errors: {
-                403: `Forbidden — caller is not Executor and not assigned to the task`,
+                403: `Forbidden - caller is not Executor and not assigned to the task`,
                 404: `Not Found`,
             },
         });
@@ -1118,7 +1118,7 @@ export class BpmnService {
             body: requestBody,
             mediaType: 'application/json',
             errors: {
-                403: `Forbidden — caller is not Executor and not assigned to the task`,
+                403: `Forbidden - caller is not Executor and not assigned to the task`,
                 404: `User task not found`,
             },
         });
@@ -1153,7 +1153,7 @@ export class BpmnService {
             body: requestBody,
             mediaType: 'application/json',
             errors: {
-                403: `Forbidden — caller is not Executor and not assigned to the task`,
+                403: `Forbidden - caller is not Executor and not assigned to the task`,
                 404: `User task not found`,
             },
         });
@@ -1260,10 +1260,15 @@ export class BpmnService {
      * @param pageSize
      * @param q Optional case-insensitive substring match against process id or process name.
      * @param createdAfter Bounds the totalCount aggregate to instances created at or after this
-     * timestamp. Strongly recommended for monitoring views — instance
+     * timestamp. Strongly recommended for monitoring views - instance
      * history accumulates indefinitely and unfiltered totals scan the full
      * table per definition. runningCount ignores this filter (it is always
      * point-in-time).
+     *
+     * @param suspended Filter by paused versions. `true` → only processes with at least one
+     * paused version; `false` → only processes with none. Omit for no
+     * filter. This is the cross-process answer to "which definitions are
+     * paused?"; `suspendedVersionCount` on each row says how many.
      *
      * @returns BpmnProcessSummaryPaginatedResponse OK
      * @throws ApiError
@@ -1274,6 +1279,7 @@ export class BpmnService {
         pageSize: number = 20,
         q?: string,
         createdAfter?: string,
+        suspended?: boolean,
     ): CancelablePromise<BpmnProcessSummaryPaginatedResponse> {
         return this.httpRequest.request({
             method: 'GET',
@@ -1286,6 +1292,7 @@ export class BpmnService {
                 'pageSize': pageSize,
                 'q': q,
                 'createdAfter': createdAfter,
+                'suspended': suspended,
             },
             errors: {
                 401: `Unauthorized`,
@@ -1307,6 +1314,9 @@ export class BpmnService {
      * timestamp. See ListBpmnProcesses for rationale. runningCount ignores
      * this filter.
      *
+     * @param suspended Filter by definition-scope suspension. `true` → only paused versions;
+     * `false` → only active ones. Omit for no filter.
+     *
      * @returns BpmnProcessVersionPaginatedResponse OK
      * @throws ApiError
      */
@@ -1316,6 +1326,7 @@ export class BpmnService {
         page: number = 1,
         pageSize: number = 20,
         createdAfter?: string,
+        suspended?: boolean,
     ): CancelablePromise<BpmnProcessVersionPaginatedResponse> {
         return this.httpRequest.request({
             method: 'GET',
@@ -1328,6 +1339,7 @@ export class BpmnService {
                 'page': page,
                 'pageSize': pageSize,
                 'createdAfter': createdAfter,
+                'suspended': suspended,
             },
             errors: {
                 401: `Unauthorized`,

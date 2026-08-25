@@ -38,5 +38,12 @@ export type BpmnResource = {
      * Timestamp when this version was uploaded.
      */
     createdAt: string;
+    /**
+     * True when at least one process definition inside this resource version
+     * is paused. Populated on list endpoints; absent on single-resource
+     * reads, where the per-process `suspendedAt` is the precise answer.
+     *
+     */
+    hasSuspendedDefinition?: boolean;
 };
 

@@ -8,11 +8,11 @@
 export type Error = {
     /**
      * Machine-readable error category. Values:
-     * * `BAD_REQUEST` — request is malformed or fails validation.
-     * * `UNAUTHORIZED` — request lacks or has an invalid authentication token.
-     * * `FORBIDDEN` — caller is authenticated but lacks permission, or has hit a quota.
-     * * `NOT_FOUND` — the addressed resource does not exist.
-     * * `INTERNAL_ERROR` — unexpected server-side failure.
+     * * `BAD_REQUEST` - request is malformed or fails validation.
+     * * `UNAUTHORIZED` - request lacks or has an invalid authentication token.
+     * * `FORBIDDEN` - caller is authenticated but lacks permission, or has hit a quota.
+     * * `NOT_FOUND` - the addressed resource does not exist.
+     * * `INTERNAL_ERROR` - unexpected server-side failure.
      *
      */
     code: Error.code;
@@ -28,11 +28,11 @@ export type Error = {
 export namespace Error {
     /**
      * Machine-readable error category. Values:
-     * * `BAD_REQUEST` — request is malformed or fails validation.
-     * * `UNAUTHORIZED` — request lacks or has an invalid authentication token.
-     * * `FORBIDDEN` — caller is authenticated but lacks permission, or has hit a quota.
-     * * `NOT_FOUND` — the addressed resource does not exist.
-     * * `INTERNAL_ERROR` — unexpected server-side failure.
+     * * `BAD_REQUEST` - request is malformed or fails validation.
+     * * `UNAUTHORIZED` - request lacks or has an invalid authentication token.
+     * * `FORBIDDEN` - caller is authenticated but lacks permission, or has hit a quota.
+     * * `NOT_FOUND` - the addressed resource does not exist.
+     * * `INTERNAL_ERROR` - unexpected server-side failure.
      *
      */
     export enum code {

@@ -19,6 +19,14 @@ export type BpmnProcessSummary = {
      */
     versionCount: number;
     /**
+     * How many versions of this process are paused. Zero means the process
+     * starts and dispatches normally; anything higher means at least one
+     * version rejects new instances. Filter the list with `suspended=true`
+     * to see only these.
+     *
+     */
+    suspendedVersionCount?: number;
+    /**
      * Instances with status RUNNING across all versions.
      */
     runningCount: number;

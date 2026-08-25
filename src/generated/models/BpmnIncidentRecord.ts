@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * A persisted incident — the cross-instance audit row that backs the
+ * A persisted incident - the cross-instance audit row that backs the
  * "Incidents" view. The same incident is also available in
  * `BpmnInstanceState.incidents` while it is still open in the engine; the
  * persisted row additionally carries `raisedAt` / `resolvedAt` /
@@ -49,7 +49,15 @@ export type BpmnIncidentRecord = {
      */
     executionKey?: string;
     /**
-     * Category of the error — same enum as `BpmnIncident.errorType`.
+     * ID of the scope containing `scopeID`, empty for the root scope. Scope IDs are opaque, so this is how a client walks a failure back up the process tree.
+     */
+    parentScopeID?: string;
+    /**
+     * Zero-based multi-instance body index when the failure happened inside one iteration of a multi-instance activity. Absent otherwise.
+     */
+    miIndex?: number;
+    /**
+     * Category of the error - same enum as `BpmnIncident.errorType`.
      */
     errorType: BpmnIncidentRecord.errorType;
     /**
@@ -75,7 +83,7 @@ export type BpmnIncidentRecord = {
 };
 export namespace BpmnIncidentRecord {
     /**
-     * Category of the error — same enum as `BpmnIncident.errorType`.
+     * Category of the error - same enum as `BpmnIncident.errorType`.
      */
     export enum errorType {
         BPMN_ERROR = 'BpmnError',
@@ -87,6 +95,11 @@ export namespace BpmnIncidentRecord {
         TIMER_RESOLUTION = 'TimerResolution',
         LINK_NOT_FOUND = 'LinkNotFound',
         MIGRATION_ERROR = 'MigrationError',
+        SUBSCRIPTION_ERROR = 'SubscriptionError',
+        ROTATION_LIMIT_ERROR = 'RotationLimitError',
+        SNAPSHOT_SIZE_EXCEEDED = 'SnapshotSizeExceeded',
+        CALL_ACTIVITY_CANCELED = 'CallActivityCanceled',
+        EXTERNAL_ROW_REFRESH_ERROR = 'ExternalRowRefreshError',
         UNKNOWN = 'Unknown',
     }
 }

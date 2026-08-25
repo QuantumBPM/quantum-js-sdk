@@ -38,7 +38,7 @@ export class Vars {
     /**
      * Return the value at name typed as T. Throws when the variable is not
      * set. Use this for opt-in typed access in worker handlers and DMN
-     * results — TypeScript treats the cast as a hint, not a runtime check.
+     * results - TypeScript treats the cast as a hint, not a runtime check.
      */
     get<T>(name: string): T {
         if (!(name in this.data)) {

@@ -8,8 +8,8 @@
 export type ModificationInstruction = {
     /**
      * Kind of operation:
-     * * `START_BEFORE_NODE` — activate `nodeID` in the given scope, optionally seeding `variables` first.
-     * * `CANCEL_TOKEN` — cancel the active token at `nodeID` in the given scope.
+     * * `START_BEFORE_NODE` - activate `nodeID` in the given scope, optionally seeding `variables` first.
+     * * `CANCEL_TOKEN` - cancel the active token at `nodeID` in the given scope.
      *
      */
     type: ModificationInstruction.type;
@@ -29,8 +29,8 @@ export type ModificationInstruction = {
 export namespace ModificationInstruction {
     /**
      * Kind of operation:
-     * * `START_BEFORE_NODE` — activate `nodeID` in the given scope, optionally seeding `variables` first.
-     * * `CANCEL_TOKEN` — cancel the active token at `nodeID` in the given scope.
+     * * `START_BEFORE_NODE` - activate `nodeID` in the given scope, optionally seeding `variables` first.
+     * * `CANCEL_TOKEN` - cancel the active token at `nodeID` in the given scope.
      *
      */
     export enum type {

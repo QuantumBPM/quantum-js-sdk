@@ -27,7 +27,7 @@ export type UserTask = {
      */
     nodeID: string;
     /**
-     * BPMN element type — typically `UserTask` or `ManualTask`.
+     * BPMN element type - typically `UserTask` or `ManualTask`.
      */
     taskType?: string;
     /**

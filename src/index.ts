@@ -1,5 +1,5 @@
 /**
- * QuantumBPM SDK — top-level entry point.
+ * QuantumBPM SDK - top-level entry point.
  *
  * @example
  * ```typescript
@@ -52,7 +52,7 @@ export class QuantumBPM {
     readonly raw: RawClient;
     /** DMN evaluation surface. */
     readonly dmn: DmnClient;
-    /** BPMN runtime surface — resources, instances, messaging, user tasks. */
+    /** BPMN runtime surface - resources, instances, messaging, user tasks. */
     readonly bpmn: BpmnClient;
     /** Project the client is bound to. */
     readonly projectId: string;

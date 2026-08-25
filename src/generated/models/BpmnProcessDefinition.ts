@@ -30,5 +30,13 @@ export type BpmnProcessDefinition = {
      * Timestamp when this version became available.
      */
     createdAt: string;
+    /**
+     * Timestamp at which this process definition was paused. Empty when active.
+     */
+    suspendedAt?: string;
+    /**
+     * Free-text reason captured at suspend time.
+     */
+    suspendReason?: string;
 };
 

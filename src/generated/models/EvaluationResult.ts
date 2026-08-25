@@ -22,10 +22,10 @@ export type EvaluationResult = {
     error?: string | null;
     /**
      * Kind of DMN element that produced this result:
-     * * `DECISION` — a decision node, the typical case.
-     * * `DECISION_SERVICE` — a decision service that aggregates multiple decisions.
-     * * `BKM` — a business knowledge model (reusable invocable logic).
-     * * `INPUT_DATA` — an input variable, included for context, not evaluated.
+     * * `DECISION` - a decision node, the typical case.
+     * * `DECISION_SERVICE` - a decision service that aggregates multiple decisions.
+     * * `BKM` - a business knowledge model (reusable invocable logic).
+     * * `INPUT_DATA` - an input variable, included for context, not evaluated.
      *
      */
     type?: EvaluationResult.type;
@@ -42,10 +42,10 @@ export type EvaluationResult = {
 export namespace EvaluationResult {
     /**
      * Kind of DMN element that produced this result:
-     * * `DECISION` — a decision node, the typical case.
-     * * `DECISION_SERVICE` — a decision service that aggregates multiple decisions.
-     * * `BKM` — a business knowledge model (reusable invocable logic).
-     * * `INPUT_DATA` — an input variable, included for context, not evaluated.
+     * * `DECISION` - a decision node, the typical case.
+     * * `DECISION_SERVICE` - a decision service that aggregates multiple decisions.
+     * * `BKM` - a business knowledge model (reusable invocable logic).
+     * * `INPUT_DATA` - an input variable, included for context, not evaluated.
      *
      */
     export enum type {

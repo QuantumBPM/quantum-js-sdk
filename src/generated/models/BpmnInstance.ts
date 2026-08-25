@@ -11,7 +11,7 @@ export type BpmnInstance = {
      */
     definitionID: string;
     /**
-     * Stable execution identifier for this instance. Use this to address the instance in all API calls — fetch state, send signals/messages, complete user tasks, list children, cancel, etc.
+     * Stable execution identifier for this instance. Use this to address the instance in all API calls - fetch state, send signals/messages, complete user tasks, list children, cancel, etc.
      */
     workflowID: string;
     /**
@@ -35,14 +35,13 @@ export type BpmnInstance = {
      */
     completedAt?: string;
     /**
-     * True when at least one unresolved incident is currently attached to this instance. Computed at query time against the open-incidents index — useful for rendering a "needs attention" indicator in instance lists without paying for a per-row state fetch from the engine.
+     * True when at least one unresolved incident is currently attached to this instance. Computed at query time against the open-incidents index - useful for rendering a "needs attention" indicator in instance lists without paying for a per-row state fetch from the engine.
      */
     hasIncident?: boolean;
     /**
      * Timestamp at which this instance was paused at INSTANCE scope. Empty
      * when not instance-suspended. The instance may still be effectively
-     * suspended via its definition — call `GetBpmnInstance` to read both
-     * scopes if you need the full picture.
+     * suspended via its definition - see `definitionSuspended`.
      *
      */
     suspendedAt?: string;
@@ -54,6 +53,14 @@ export type BpmnInstance = {
      * Free-text reason captured at suspend time.
      */
     suspendReason?: string;
+    /**
+     * True when the process definition this instance runs is paused. Token
+     * dispatch stops while either scope is set, so an instance is
+     * effectively paused if this is true or `suspendedAt` is present. The
+     * two stay separate because resume acts on one scope at a time.
+     *
+     */
+    definitionSuspended?: boolean;
     /**
      * Caller-supplied correlation key set when the instance was started. Inherited unchanged on child instances spawned via CallActivity.
      */

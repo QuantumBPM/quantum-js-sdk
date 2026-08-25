@@ -13,10 +13,10 @@ export type ExternalJobBatchResponse = {
         executionKey: string;
         /**
          * Outcome for this item:
-         * * `completed` — the job was completed successfully.
-         * * `failed` — the job exhausted its retries and surfaced as an incident.
-         * * `requeued` — a retry budget remained, the job is back in PENDING.
-         * * `error` — the per-item operation itself failed; the job's state is unchanged.
+         * * `completed` - the job was completed successfully.
+         * * `failed` - the job exhausted its retries and surfaced as an incident.
+         * * `requeued` - a retry budget remained, the job is back in PENDING.
+         * * `error` - the per-item operation itself failed; the job's state is unchanged.
          *
          */
         status: 'completed' | 'failed' | 'requeued' | 'error';

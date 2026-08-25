@@ -56,7 +56,7 @@ export type BpmnInstanceState = {
     /**
      * Present when this instance has been explicitly suspended by an
      * operator. Persisted across CaN rotations. Clear via the resume
-     * instance endpoint. Composes with `definitionSuspension` — both must
+     * instance endpoint. Composes with `definitionSuspension` - both must
      * be null for the instance to dispatch tokens.
      *
      */

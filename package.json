@@ -1,7 +1,7 @@
 {
     "name": "@quantumbpm/sdk",
-    "version": "1.0.0",
-    "description": "QuantumBPM TypeScript/JavaScript SDK — DMN evaluation, BPMN orchestration, and external job workers.",
+    "version": "1.1.0",
+    "description": "QuantumBPM TypeScript/JavaScript SDK - DMN evaluation, BPMN orchestration, and external job workers.",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
@@ -27,7 +27,7 @@
     },
     "dependencies": {
         "@opentelemetry/api": "^1.9.1",
-        "axios": "^1.6.0",
+        "axios": "^1.19.0",
         "jsonwebtoken": "^9.0.0"
     },
     "devDependencies": {

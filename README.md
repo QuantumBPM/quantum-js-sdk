@@ -1,6 +1,6 @@
 # QuantumBPM TypeScript/JavaScript SDK
 
-Official TypeScript/JavaScript SDK for the [QuantumBPM](https://quantumbpm.com) platform — DMN evaluation, BPMN process orchestration, and external job workers.
+Official TypeScript/JavaScript SDK for the [QuantumBPM](https://quantumbpm.com) platform - DMN evaluation, BPMN process orchestration, and external job workers.
 
 ## Installation
 
@@ -18,7 +18,7 @@ Node.js 18+ (uses native `AbortController` and `AbortSignal`).
 | `ZitadelTokenProvider`, `StaticTokenProvider`     | Authentication. Implement `TokenProvider` for BYO providers                   |
 | `DmnClient`                                       | DMN evaluation: stored definitions, ad-hoc XML, batch                         |
 | `BpmnClient`                                      | BPMN resources, instances, messaging, user tasks, processes                   |
-| `Worker`                                          | External job worker runtime — long-poll, lock heartbeat, dispatch             |
+| `Worker`                                          | External job worker runtime - long-poll, lock heartbeat, dispatch             |
 | `Vars`                                            | Variables wrapper with typed accessors and FEEL-context conversion            |
 | `RawClient`                                       | OpenAPI-generated client. Reachable via `client.raw`, never hand-edited       |
 
@@ -262,7 +262,7 @@ Handlers that throw anything other than `BpmnError` report `WORKER_ERROR` and th
 
 ### Typed handlers
 
-Generic on `handle()` decodes the job's input variables into a typed shape. The SDK does not validate at runtime — TypeScript treats it as a hint:
+Generic on `handle()` decodes the job's input variables into a typed shape. The SDK does not validate at runtime - TypeScript treats it as a hint:
 
 ```typescript
 interface EmailJob {
@@ -301,11 +301,11 @@ interface Loan {
 const loan = v.as<Loan>();
 ```
 
-`get<T>` and `as<T>` are TypeScript hints — no runtime validation. Combine with a runtime validator (e.g. Zod) at boundaries when you need it.
+`get<T>` and `as<T>` are TypeScript hints - no runtime validation. Combine with a runtime validator (e.g. Zod) at boundaries when you need it.
 
 ### Number precision
 
-FEEL numbers are exact decimals server-side, but this SDK deserializes JSON with `JSON.parse`, so numbers arrive as IEEE-754 doubles (~15–17 significant digits). Values beyond double precision — e.g. `1234567890.123456789012345678` — are silently rounded on receipt, and echoing them back sends the rounded value. This is a JavaScript platform limitation; the Go, Java, and Python SDKs preserve exact decimals.
+FEEL numbers are exact decimals server-side, but this SDK deserializes JSON with `JSON.parse`, so numbers arrive as IEEE-754 doubles (~15–17 significant digits). Values beyond double precision - e.g. `1234567890.123456789012345678` - are silently rounded on receipt, and echoing them back sends the rounded value. This is a JavaScript platform limitation; the Go, Java, and Python SDKs preserve exact decimals.
 
 If you need currency-grade round-trips through a JS worker or client, represent those values as FEEL **strings** in your processes and convert with a decimal library (e.g. `decimal.js`, `big.js`) at the edges.
 
@@ -319,4 +319,4 @@ await client.raw.bpmn.migrateBpmnInstance(client.projectId, workflowId, body);
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License - see [LICENSE](LICENSE) for details.

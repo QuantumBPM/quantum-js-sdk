@@ -27,6 +27,13 @@ export type BpmnResourceSummary = {
      */
     isDeployed: boolean;
     /**
+     * True when any version under this `definitionsID` contains a paused
+     * process definition - including older versions, since a pause on a
+     * superseded version is exactly what's hard to find otherwise.
+     *
+     */
+    hasSuspendedDefinition?: boolean;
+    /**
      * Upload timestamp of the latest version.
      */
     createdAt: string;
