@@ -18,7 +18,7 @@ export type ModificationInstruction = {
      */
     nodeID: string;
     /**
-     * Scope to apply the instruction in. Empty applies to the root process scope.
+     * Scope to apply the instruction in, as reported by the instance's active scopes. Empty applies to the root process scope, for both instruction types. A scope that is not live on the instance is rejected with a 400.
      */
     scopeID?: string;
     /**

@@ -10,6 +10,7 @@ import type { BpmnInstanceState } from '../models/BpmnInstanceState';
 import type { CreateDefinitionRequest } from '../models/CreateDefinitionRequest';
 import type { CreateProjectRequest } from '../models/CreateProjectRequest';
 import type { Definition } from '../models/Definition';
+import type { ErrorMode } from '../models/ErrorMode';
 import type { EvaluateStoredRequest } from '../models/EvaluateStoredRequest';
 import type { EvaluationResult } from '../models/EvaluationResult';
 import type { Execution } from '../models/Execution';
@@ -71,6 +72,7 @@ export class DefaultService {
              * Names of decisions or decision services to evaluate. If empty, all decisions in the document are evaluated.
              */
             decisions?: Array<string>;
+            errorMode?: ErrorMode;
         },
     ): CancelablePromise<Record<string, EvaluationResult>> {
         return this.httpRequest.request({
@@ -423,8 +425,8 @@ export class DefaultService {
         });
     }
     /**
-     * Update a DMN definition's metadata
-     * Modifies metadata (name) of a stored definition. The DMN XML and version are immutable; post a new definition with the same XML `id` to publish a new version.
+     * Update a DMN definition version
+     * Replaces the name and XML of a stored definition version in place. Send `version` 0 to store the change as the next version of the same definition instead.
      * @param projectId
      * @param definitionId
      * @param requestBody

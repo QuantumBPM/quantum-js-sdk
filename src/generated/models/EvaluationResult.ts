@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { FeelValue } from './FeelValue';
+import type { FeelWarning } from './FeelWarning';
 import type { HitRule } from './HitRule';
 /**
  * Result of evaluating a single decision (or decision service / BKM / input data) within a DMN evaluation.
@@ -20,6 +21,10 @@ export type EvaluationResult = {
      * Error message if the decision failed to evaluate. Null on success.
      */
     error?: string | null;
+    /**
+     * FEEL runtime errors that lenient mode replaced with `null` while this decision was evaluated. Absent when there were none.
+     */
+    warnings?: Array<FeelWarning>;
     /**
      * Kind of DMN element that produced this result:
      * * `DECISION` - a decision node, the typical case.

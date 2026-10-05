@@ -65,6 +65,18 @@ export type BpmnInstance = {
      * Caller-supplied correlation key set when the instance was started. Inherited unchanged on child instances spawned via CallActivity.
      */
     businessId?: string;
+    /**
+     * BPMN process ID of the definition this instance was started from. Together with `processVersion` it addresses the version, which `definitionID` alone does not.
+     */
+    processId?: string;
+    /**
+     * Human-readable name of that process definition.
+     */
+    processName?: string;
+    /**
+     * Version of the process definition this instance was started from.
+     */
+    processVersion?: number;
 };
 export namespace BpmnInstance {
     /**

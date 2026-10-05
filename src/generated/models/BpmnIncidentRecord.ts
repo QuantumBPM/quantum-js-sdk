@@ -37,6 +37,10 @@ export type BpmnIncidentRecord = {
      */
     processName?: string;
     /**
+     * Version of that process definition. With `processID` it addresses the exact version the incident was raised on.
+     */
+    processVersion?: number;
+    /**
      * ID of the BPMN node where the error occurred.
      */
     nodeID: string;

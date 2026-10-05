@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ErrorMode } from './ErrorMode';
 import type { FeelContext } from './FeelContext';
 /**
  * Payload for evaluating a stored DMN definition.
@@ -12,6 +13,7 @@ export type EvaluateStoredRequest = {
      */
     version?: number;
     context: FeelContext;
+    errorMode?: ErrorMode;
     /**
      * Names of decision services to evaluate. If empty, no decision services are evaluated.
      */

@@ -545,6 +545,13 @@ export class BpmnService {
      * running instance. Useful for unblocking instances that have ended up
      * in unintended states. Restricted to project administrators.
      *
+     * The instructions are validated against the live instance before
+     * anything is applied, and the whole batch is refused with a 400 if any
+     * of them cannot be: an unknown scope, a `START_BEFORE_NODE` naming a
+     * node the instance's process version does not contain, or a
+     * `CANCEL_TOKEN` with no live token, scope or incident at its target.
+     * A batch is applied whole or not at all.
+     *
      * @param projectId
      * @param workflowId
      * @param requestBody
@@ -565,6 +572,10 @@ export class BpmnService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                400: `Bad Request`,
+                404: `Not Found`,
+            },
         });
     }
     /**
