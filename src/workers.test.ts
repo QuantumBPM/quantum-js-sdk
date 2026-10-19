@@ -1,5 +1,7 @@
-import { Worker, Job } from './workers';
+import { Worker, Job, WorkerConfig } from './workers';
 import { RawClient } from './generated/RawClient';
+import { ApiError } from './generated/core/ApiError';
+import { CancelablePromise } from './generated/core/CancelablePromise';
 import { Vars } from './variables';
 import type { ExternalJob } from './generated';
 
@@ -113,5 +115,167 @@ describe('Worker job dispatch', () => {
 
         expect(received).toBeDefined();
         expect(received!.businessId).toBeUndefined();
+    });
+});
+
+describe('Worker clientId', () => {
+    const fakeRaw = {} as unknown as RawClient;
+    const projectId = '00000000-0000-0000-0000-000000000001';
+
+    test('keeps a configured clientId', () => {
+        const w = new Worker(fakeRaw, projectId, { clientId: 'billing-1' });
+        expect((w as any).clientId).toBe('billing-1');
+    });
+
+    // The server refuses a poll with an empty clientID, so blank falls back.
+    test.each(['', '   '])('falls back to a generated id for %j', (blank) => {
+        const w = new Worker(fakeRaw, projectId, { clientId: blank });
+        expect((w as any).clientId).toMatch(/^worker-.+-\d+$/);
+    });
+});
+
+describe('Worker locks and shutdown', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    const job = {
+        executionKey: 'wf-1:node-a:1',
+        workflowID: 'wf-1',
+        taskType: 'payment',
+    } as unknown as ExternalJob;
+
+    function apiError(status: number): ApiError {
+        return new ApiError(
+            { method: 'POST', url: '' },
+            { url: '', ok: false, status, statusText: '', body: undefined },
+            `status ${status}`,
+        );
+    }
+
+    // The first poll hands out one job. Later polls hang until cancelled.
+    function setup(config: WorkerConfig = {}) {
+        let polls = 0;
+        const calls = {
+            poll: jest.fn(() => new CancelablePromise<ExternalJob[]>((resolve) => {
+                if (polls++ === 0) resolve([job]);
+            })),
+            heartbeat: jest.fn(async (..._args: unknown[]) => {}),
+            complete: jest.fn(async (..._args: unknown[]) => {}),
+            throwError: jest.fn(async (..._args: unknown[]) => {}),
+        };
+        const raw = {
+            default: {
+                pollBpmnExternalJobs: calls.poll,
+                heartbeatBpmnExternalJob: calls.heartbeat,
+                completeBpmnExternalJob: calls.complete,
+            },
+            bpmn: { throwBpmnExternalJobError: calls.throwError },
+        } as unknown as RawClient;
+        const warnings: string[] = [];
+        const errors: string[] = [];
+        const w = new Worker(raw, '00000000-0000-0000-0000-000000000001', {
+            logger: {
+                error: (msg: string) => { errors.push(msg); },
+                warn: (msg: string) => { warnings.push(msg); },
+            },
+            ...config,
+        });
+        return { w, calls, warnings, errors };
+    }
+
+    test('a heartbeat 409 aborts the handler signal and sends no complete', async () => {
+        const { w, calls, warnings } = setup();
+        calls.heartbeat.mockRejectedValue(apiError(409));
+        let signal: AbortSignal | undefined;
+        w.handle('payment', (_job, s) => {
+            signal = s;
+            return new Promise((_resolve, reject) => {
+                s.addEventListener('abort', () => reject(new Error('aborted')));
+            });
+        });
+
+        const stop = new AbortController();
+        const running = w.run(stop.signal);
+        await jest.advanceTimersByTimeAsync(15_000);
+        expect(signal?.aborted).toBe(true);
+
+        await jest.advanceTimersByTimeAsync(60_000);
+        stop.abort();
+        await running;
+
+        expect(calls.heartbeat).toHaveBeenCalledTimes(1);
+        expect(calls.complete).not.toHaveBeenCalled();
+        expect(calls.throwError).not.toHaveBeenCalled();
+        expect(warnings.filter(m => m.includes('lock lost'))).toHaveLength(1);
+    });
+
+    test('after shutdown starts, a running handler keeps heartbeating and completes', async () => {
+        const { w, calls } = setup();
+        let signal: AbortSignal | undefined;
+        let finish: (v: Vars) => void = () => {};
+        w.handle('payment', (_job, s) => {
+            signal = s;
+            return new Promise<Vars>((resolve) => { finish = resolve; });
+        }, { maxJobs: 2, lockDuration: '10s' });
+
+        const stop = new AbortController();
+        const running = w.run(stop.signal);
+        await jest.advanceTimersByTimeAsync(0);
+        expect(signal).toBeDefined();
+        // The second poll is the in-flight long-poll that the abort cancels.
+        expect(calls.poll).toHaveBeenCalledTimes(2);
+
+        stop.abort();
+        await jest.advanceTimersByTimeAsync(15_000);
+        expect(calls.heartbeat).toHaveBeenCalledTimes(3);
+        expect(signal!.aborted).toBe(false);
+
+        finish(new Vars().set('ok', true));
+        await running;
+
+        expect(calls.poll).toHaveBeenCalledTimes(2);
+        expect(calls.complete).toHaveBeenCalledTimes(1);
+        expect(calls.complete.mock.calls[0][1]).toBe('wf-1:node-a:1');
+        expect(calls.complete.mock.calls[0][2]).toMatchObject({ variables: { ok: true } });
+    });
+
+    test('the shutdown timeout aborts a handler that does not finish and run resolves', async () => {
+        const { w, calls, warnings } = setup({ shutdownTimeout: '5s' });
+        let signal: AbortSignal | undefined;
+        w.handle('payment', (_job, s) => {
+            signal = s;
+            return new Promise<Vars>(() => {});
+        });
+
+        const stop = new AbortController();
+        let resolved = false;
+        const running = w.run(stop.signal).then(() => { resolved = true; });
+        await jest.advanceTimersByTimeAsync(0);
+        stop.abort();
+
+        await jest.advanceTimersByTimeAsync(4_999);
+        expect(resolved).toBe(false);
+        expect(signal!.aborted).toBe(false);
+
+        await jest.advanceTimersByTimeAsync(1);
+        await running;
+        expect(signal!.aborted).toBe(true);
+        expect(calls.complete).not.toHaveBeenCalled();
+        expect(calls.throwError).not.toHaveBeenCalled();
+        expect(warnings.some(m => m.includes('shutdown timeout'))).toBe(true);
+        // Heartbeat and shutdown timers are all cleared.
+        expect(jest.getTimerCount()).toBe(0);
+    });
+
+    test('a complete 409 is logged as a discarded result', async () => {
+        const { w, calls, warnings, errors } = setup();
+        calls.complete.mockRejectedValue(apiError(409));
+        w.handle('payment', async () => new Vars());
+
+        const registration = (w as any).registrations.get('payment');
+        await (w as any).dispatch(registration, job, new AbortController().signal);
+
+        expect(warnings).toContain('workers: complete wf-1:node-a:1: lock lost, result discarded');
+        expect(errors).toHaveLength(0);
     });
 });

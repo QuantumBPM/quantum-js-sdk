@@ -9,6 +9,7 @@ import { hostname } from 'os';
 import { context as otelContext, SpanStatusCode } from '@opentelemetry/api';
 
 import { RawClient } from './generated/RawClient';
+import { ApiError } from './generated/core/ApiError';
 import { ExternalJob } from './generated/models/ExternalJob';
 import { startJobSpan } from './tracing';
 
@@ -91,6 +92,12 @@ export interface WorkerConfig {
      * 2048. User-thrown BpmnError variables are not clamped.
      */
     maxErrorMessageBytes?: number;
+    /**
+     * How long run waits for running handlers once its signal aborts, as a
+     * duration string like "20s". Handlers still running after it are
+     * aborted and report nothing. Default "20s".
+     */
+    shutdownTimeout?: string;
 }
 
 interface Registration {
@@ -107,6 +114,7 @@ const DEFAULT_OPTIONS: Required<HandleOptions> = {
 
 const POLL_ERROR_BACKOFF_MS = 2_000;
 const DEFAULT_MAX_ERROR_MESSAGE_BYTES = 2048;
+const DEFAULT_SHUTDOWN_TIMEOUT = '20s';
 
 /**
  * Worker is a long-poll runtime owning a set of handlers, one per task type.
@@ -116,18 +124,20 @@ export class Worker {
     private readonly clientId: string;
     private readonly logger: NonNullable<WorkerConfig['logger']>;
     private readonly maxErrorMessageBytes: number;
+    private readonly shutdownTimeoutMs: number;
 
     constructor(
         private readonly raw: RawClient,
         private readonly projectId: string,
         config: WorkerConfig = {},
     ) {
-        this.clientId = config.clientId ?? `worker-${hostname()}-${process.pid}`;
+        this.clientId = config.clientId?.trim() || `worker-${hostname()}-${process.pid}`;
         this.logger = config.logger ?? console;
         this.maxErrorMessageBytes =
             config.maxErrorMessageBytes && config.maxErrorMessageBytes > 0
                 ? config.maxErrorMessageBytes
                 : DEFAULT_MAX_ERROR_MESSAGE_BYTES;
+        this.shutdownTimeoutMs = parseDurationMs(config.shutdownTimeout ?? DEFAULT_SHUTDOWN_TIMEOUT) ?? 20_000;
     }
 
     /**
@@ -148,30 +158,42 @@ export class Worker {
     }
 
     /**
-     * Start the polling loops. Resolves when `signal` is aborted, after
-     * in-flight handlers have settled.
+     * Start the polling loops. When `signal` aborts, polling stops and
+     * running handlers get up to shutdownTimeout to finish and report.
+     * Resolves once they have, or once the timeout aborts the rest.
      */
     async run(signal: AbortSignal): Promise<void> {
         if (this.registrations.size === 0) {
             throw new Error('workers: no handlers registered');
         }
-        await Promise.all([...this.registrations.values()].map(r => this.runTaskType(r, signal)));
+        const hardStop = new AbortController();
+        let timer: NodeJS.Timeout | undefined;
+        const onAbort = () => {
+            timer = setTimeout(() => hardStop.abort(), this.shutdownTimeoutMs);
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+        try {
+            await Promise.all([...this.registrations.values()].map(r => this.runTaskType(r, signal, hardStop.signal)));
+        } finally {
+            signal.removeEventListener('abort', onAbort);
+            clearTimeout(timer);
+        }
     }
 
-    private async runTaskType(r: Registration, signal: AbortSignal): Promise<void> {
+    private async runTaskType(r: Registration, signal: AbortSignal, hardStop: AbortSignal): Promise<void> {
         const inflight = new Set<Promise<void>>();
 
         while (!signal.aborted) {
             // Wait until at least one slot is free.
             while (inflight.size >= r.options.maxJobs && !signal.aborted) {
-                await Promise.race(inflight);
+                await anySettledOrAborted(inflight, signal);
             }
             if (signal.aborted) break;
 
             const slots = r.options.maxJobs - inflight.size;
             let jobs: ExternalJob[];
             try {
-                jobs = await this.poll(r, slots);
+                jobs = await this.poll(r, slots, signal);
             } catch (err) {
                 if (signal.aborted) break;
                 this.logger.error(`workers: poll ${r.taskType}`, err);
@@ -179,56 +201,70 @@ export class Worker {
                 continue;
             }
 
+            // Jobs from a poll that raced the abort still run and report.
             for (const job of jobs) {
-                const p = this.dispatch(r, job, signal).finally(() => inflight.delete(p));
+                const p = this.dispatch(r, job, hardStop).finally(() => inflight.delete(p));
                 inflight.add(p);
             }
         }
 
-        await Promise.allSettled(inflight);
+        await anySettledOrAborted([Promise.allSettled(inflight)], hardStop);
+        if (inflight.size > 0) {
+            this.logger.warn(`workers: shutdown timeout, abandoning ${inflight.size} ${r.taskType} job(s)`);
+        }
     }
 
-    private async poll(r: Registration, slots: number): Promise<ExternalJob[]> {
+    private async poll(r: Registration, slots: number, signal: AbortSignal): Promise<ExternalJob[]> {
         const maxJobs = Math.max(1, Math.min(r.options.maxJobs, slots));
-        const resp = await this.raw.default.pollBpmnExternalJobs(this.projectId, {
+        const req = this.raw.default.pollBpmnExternalJobs(this.projectId, {
             clientID: this.clientId,
             taskType: r.taskType,
             maxJobs,
             timeout: r.options.pollTimeout,
             lockDuration: r.options.lockDuration,
         });
-        return resp ?? [];
+        const onAbort = () => req.cancel();
+        signal.addEventListener('abort', onAbort, { once: true });
+        try {
+            return (await req) ?? [];
+        } finally {
+            signal.removeEventListener('abort', onAbort);
+        }
     }
 
-    private async dispatch(r: Registration, raw: ExternalJob, parentSignal: AbortSignal): Promise<void> {
-        const ac = new AbortController();
-        const onAbort = () => ac.abort();
-        parentSignal.addEventListener('abort', onAbort, { once: true });
-
-        const heartbeatTimer = this.startHeartbeat(r, raw, ac.signal);
-
-        const vars = Vars.fromWireMap(raw.variables);
-        const job: Job<unknown> = {
-            executionKey: raw.executionKey,
-            workflowId: raw.workflowID,
-            taskType: r.taskType,
-            vars,
-            typed: vars.toRecord(),
-            headers: raw.headers ?? {},
-            businessId: raw.businessId,
-            raw,
-        };
-
+    private async dispatch(r: Registration, raw: ExternalJob, hardStop: AbortSignal): Promise<void> {
         const { ctx: spanCtx, span } = startJobSpan(raw, r.taskType);
 
+        // The job signal aborts on a lost lock or when the shutdown timeout
+        // passes. An aborted job reports nothing because its lock is gone.
+        const ac = new AbortController();
+        const onHardStop = () => ac.abort();
+        hardStop.addEventListener('abort', onHardStop, { once: true });
+        const stopHeartbeat = this.startHeartbeat(r, raw, ac);
+
         try {
+            const vars = Vars.fromWireMap(raw.variables);
+            const job: Job<unknown> = {
+                executionKey: raw.executionKey,
+                workflowId: raw.workflowID,
+                taskType: r.taskType,
+                vars,
+                typed: vars.toRecord(),
+                headers: raw.headers ?? {},
+                businessId: raw.businessId,
+                raw,
+            };
             // Run the handler (and the success-path complete) under the span so
             // the user's own OpenTelemetry work nests beneath it.
             await otelContext.with(spanCtx, async () => {
                 const result = await r.handler(job, ac.signal);
+                stopHeartbeat();
+                if (ac.signal.aborted) return;
                 await this.complete(raw, result ?? new Vars());
             });
         } catch (err) {
+            stopHeartbeat();
+            if (ac.signal.aborted) return;
             if (err instanceof BpmnError) {
                 span.setAttribute('bpmn.error_code', err.code);
                 // Business outcome: route to the boundary immediately
@@ -246,27 +282,48 @@ export class Worker {
             }
         } finally {
             span.end();
-            clearInterval(heartbeatTimer);
-            parentSignal.removeEventListener('abort', onAbort);
+            hardStop.removeEventListener('abort', onHardStop);
             ac.abort();
         }
     }
 
-    private startHeartbeat(r: Registration, job: ExternalJob, signal: AbortSignal): NodeJS.Timeout {
-        // Heartbeat at lockDuration / 2, with a 1-second floor.
+    /**
+     * Heartbeat at lockDuration / 2, with a 1-second floor, until the returned
+     * stop is called or ac aborts. A 409 or 404 means this worker no longer
+     * holds the job, so it aborts ac.
+     */
+    private startHeartbeat(r: Registration, job: ExternalJob, ac: AbortController): () => void {
         const lockMs = parseDurationMs(r.options.lockDuration) ?? 30_000;
         const interval = Math.max(1_000, Math.floor(lockMs / 2));
-        return setInterval(async () => {
-            if (signal.aborted) return;
+        let stopped = false;
+        let inFlight = false;
+        const timer = setInterval(async () => {
+            if (inFlight) return;
+            inFlight = true;
             try {
                 await this.raw.default.heartbeatBpmnExternalJob(this.projectId, job.executionKey, {
                     clientID: this.clientId,
                     lockDuration: r.options.lockDuration,
                 });
             } catch (err) {
-                this.logger.warn(`workers: heartbeat ${job.executionKey}`, err);
+                if (stopped) return;
+                const status = httpStatus(err);
+                if (status === 409 || status === 404) {
+                    this.logger.warn(`workers: lock lost on ${job.executionKey}, aborting the handler`);
+                    ac.abort();
+                } else {
+                    this.logger.warn(`workers: heartbeat ${job.executionKey}`, err);
+                }
+            } finally {
+                inFlight = false;
             }
         }, interval);
+        const stop = () => {
+            stopped = true;
+            clearInterval(timer);
+        };
+        ac.signal.addEventListener('abort', stop, { once: true });
+        return stop;
     }
 
     private async complete(job: ExternalJob, vars: Vars): Promise<void> {
@@ -277,7 +334,7 @@ export class Worker {
                 variables: vars.toWireMap() as any,
             });
         } catch (err) {
-            this.logger.error(`workers: complete ${job.executionKey}`, err);
+            this.logReportError('complete', job, err);
         }
     }
 
@@ -290,7 +347,16 @@ export class Worker {
                 variables: vars.toWireMap() as any,
             });
         } catch (err) {
-            this.logger.error(`workers: throwError ${job.executionKey}`, err);
+            this.logReportError('throwError', job, err);
+        }
+    }
+
+    private logReportError(op: string, job: ExternalJob, err: unknown): void {
+        // 409 means this worker no longer holds the job's lock.
+        if (httpStatus(err) === 409) {
+            this.logger.warn(`workers: ${op} ${job.executionKey}: lock lost, result discarded`);
+        } else {
+            this.logger.error(`workers: ${op} ${job.executionKey}`, err);
         }
     }
 
@@ -331,6 +397,26 @@ function parseDurationMs(d: string): number | null {
         case 'h': return value * 3_600_000;
         default: return null;
     }
+}
+
+function httpStatus(err: unknown): number | undefined {
+    return err instanceof ApiError ? err.status : undefined;
+}
+
+/** Resolves once any of `promises` settles or `signal` aborts. */
+function anySettledOrAborted(promises: Iterable<Promise<unknown>>, signal: AbortSignal): Promise<void> {
+    return new Promise((resolve) => {
+        if (signal.aborted) {
+            resolve();
+            return;
+        }
+        const done = () => {
+            signal.removeEventListener('abort', done);
+            resolve();
+        };
+        signal.addEventListener('abort', done, { once: true });
+        for (const p of promises) p.then(done, done);
+    });
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {

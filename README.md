@@ -226,7 +226,7 @@ worker.handle('send-email', async (job) => {
 await worker.run(ac.signal);
 ```
 
-`run()` resolves when the AbortSignal is triggered, after in-flight handlers settle.
+`run()` resolves after the AbortSignal aborts and in-flight handlers settle. See [Graceful shutdown](#graceful-shutdown).
 
 ### Concurrency, polling, and locks
 
@@ -239,6 +239,38 @@ worker.handle('send-email', handler, {
 ```
 
 Concurrency is per task type. Different task types run independently. The runtime auto-renews the lock at half the lock-duration interval while the handler runs.
+
+### Lost locks
+
+Each polled job is locked to the worker's `clientId`, and heartbeats keep that lock while the handler runs. The server caps one attempt at 30 minutes by default (`BPMN_JOB_MAX_HOLD`). If the lock runs out, the server charges the job a retry and offers it again, or raises an incident when no retries are left.
+
+When a heartbeat finds the lock gone, the runtime aborts the handler's `signal` and reports nothing for that job. A result reported after the lock is gone is discarded by the server and logged as a warning. Pass the signal to your I/O so the handler stops early:
+
+```typescript
+worker.handle('fetch-report', async (job, signal) => {
+    const res = await fetch(job.vars.get<string>('url'), { signal });
+    return new Vars().set('status', res.status);
+});
+```
+
+### Graceful shutdown
+
+Abandoning a running job costs it a retry, so stop the worker cleanly. When the signal passed to `run()` aborts:
+
+- Polling stops at once and the in-flight long-poll is cancelled.
+- Running handlers keep their locks and keep heartbeating. Their results are reported as usual.
+- `run()` resolves once they finish, or after `shutdownTimeout` (default `'20s'`). Handlers still running then have their `signal` aborted and report nothing. Their locks run out on the server.
+
+```typescript
+const worker = client.newWorker({ clientId: 'billing-svc', shutdownTimeout: '20s' });
+// ...register handlers
+
+const ac = new AbortController();
+process.once('SIGTERM', () => ac.abort());
+await worker.run(ac.signal);
+```
+
+On Kubernetes, set `terminationGracePeriodSeconds` above the shutdown timeout so the pod is not killed while handlers finish. The Kubernetes default of 30s fits the 20s default.
 
 ### Throwing typed BPMN errors
 
