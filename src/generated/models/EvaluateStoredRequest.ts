@@ -9,7 +9,10 @@ import type { FeelContext } from './FeelContext';
  */
 export type EvaluateStoredRequest = {
     /**
-     * Specific definition version to evaluate. Defaults to the latest version.
+     * Specific definition version to evaluate when evaluating by definitions id. Defaults to the
+     * latest version. The `version` query parameter does the same, and a request giving both with
+     * different values is rejected. Evaluating by definition UUID ignores it, as the UUID names one version.
+     *
      */
     version?: number;
     context: FeelContext;

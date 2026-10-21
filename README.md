@@ -238,7 +238,11 @@ worker.handle('send-email', handler, {
 });
 ```
 
-Concurrency is per task type. Different task types run independently. The runtime auto-renews the lock at half the lock-duration interval while the handler runs.
+Concurrency is per task type. Different task types run independently.
+
+The server clamps `lockDuration` to between 10s and 5m by default (`BPMN_WORKER_LEASE_MIN` / `BPMN_WORKER_LEASE_MAX`) and returns the expiry it granted with each job (`lockExpiresAt`). While the handler runs, the runtime heartbeats at half of the granted lock, or half of `lockDuration` when that is shorter, with a 1s floor. A `lockDuration` of `'11m'` therefore heartbeats every 150s under the default 5m cap.
+
+`lockDuration`, `pollTimeout` and `shutdownTimeout` take Go duration strings, the format the server parses: a sequence of numbers with optional fractions and a unit each, such as `'30s'`, `'12.5s'`, `'1m30s'`, `'500ms'` or `'1.5h'`. Units are `ns`, `us` (or `µs`), `ms`, `s`, `m` and `h`. An invalid value throws: `handle()` throws for `lockDuration` and `pollTimeout`, `newWorker()` throws for `shutdownTimeout`.
 
 ### Lost locks
 

@@ -1,4 +1,4 @@
-import { Worker, Job, WorkerConfig } from './workers';
+import { Worker, Job, WorkerConfig, heartbeatIntervalMs, parseDurationMs } from './workers';
 import { RawClient } from './generated/RawClient';
 import { ApiError } from './generated/core/ApiError';
 import { CancelablePromise } from './generated/core/CancelablePromise';
@@ -134,6 +134,100 @@ describe('Worker clientId', () => {
     });
 });
 
+describe('parseDurationMs', () => {
+    test.each([
+        ['30s', 30_000],
+        ['12.5s', 12_500],
+        ['1m30s', 90_000],
+        ['1h2m3.5s', 3_723_500],
+        ['500ms', 500],
+        ['1.5h', 5_400_000],
+        ['.5s', 500],
+        ['5.s', 5_000],
+        ['1500us', 1.5],
+        ['1500µs', 1.5],
+        ['2000000ns', 2],
+        ['0', 0],
+        ['+1s', 1_000],
+        ['-1s', -1_000],
+        [' 30s', 30_000],
+        ['30s ', 30_000],
+    ])('parses %j', (input, ms) => {
+        expect(parseDurationMs(input)).toBeCloseTo(ms);
+    });
+
+    test.each(['', '30', '12.5', 's', '.s', '1.2.3s', '1m30', '30 s', '1d', '5sec', '1,5s', 'soon'])(
+        'rejects %j',
+        (input) => {
+            expect(parseDurationMs(input)).toBeNull();
+        },
+    );
+});
+
+describe('heartbeatIntervalMs', () => {
+    const now = Date.parse('2026-10-21T10:00:00Z');
+    const at = (ms: number) => new Date(now + ms).toISOString();
+
+    test('uses the granted lock when the server clamped the request down', () => {
+        expect(heartbeatIntervalMs(660_000, at(300_000), now)).toBe(150_000);
+    });
+
+    test('uses the requested lock when it is shorter than the grant', () => {
+        expect(heartbeatIntervalMs(5_000, at(10_000), now)).toBe(2_500);
+    });
+
+    test('handles a fractional lock', () => {
+        expect(heartbeatIntervalMs(12_500, at(12_500), now)).toBe(6_250);
+    });
+
+    test.each([
+        ['missing', undefined],
+        ['in the past', '2026-10-21T09:59:00Z'],
+        ['unparseable', 'later'],
+    ])('falls back to the requested lock when lockExpiresAt is %s', (_name, expiresAt) => {
+        expect(heartbeatIntervalMs(30_000, expiresAt, now)).toBe(15_000);
+    });
+
+    test('never goes below one second', () => {
+        expect(heartbeatIntervalMs(500, at(10_000), now)).toBe(1_000);
+    });
+});
+
+describe('Worker duration validation', () => {
+    const fakeRaw = {} as unknown as RawClient;
+    const projectId = '00000000-0000-0000-0000-000000000001';
+    const handler = async () => new Vars();
+
+    test('handle accepts fractional and compound durations', () => {
+        const w = new Worker(fakeRaw, projectId);
+        w.handle('payment', handler, { lockDuration: '12.5s', pollTimeout: '1m30s' });
+        expect((w as any).registrations.get('payment').lockMs).toBe(12_500);
+    });
+
+    test('handle trims the durations it sends', () => {
+        const w = new Worker(fakeRaw, projectId);
+        w.handle('payment', handler, { lockDuration: ' 10s ', pollTimeout: '5s ' });
+        const reg = (w as any).registrations.get('payment');
+        expect([reg.options.lockDuration, reg.options.pollTimeout, reg.lockMs]).toEqual(['10s', '5s', 10_000]);
+    });
+
+    test('handle throws on an invalid lockDuration', () => {
+        const w = new Worker(fakeRaw, projectId);
+        expect(() => w.handle('payment', handler, { lockDuration: '12.5x' })).toThrow(/invalid lockDuration "12.5x"/);
+        expect((w as any).registrations.size).toBe(0);
+    });
+
+    test('handle throws on an invalid pollTimeout', () => {
+        const w = new Worker(fakeRaw, projectId);
+        expect(() => w.handle('payment', handler, { pollTimeout: 'soon' })).toThrow(/invalid pollTimeout "soon"/);
+    });
+
+    test('the constructor throws on an invalid shutdownTimeout', () => {
+        expect(() => new Worker(fakeRaw, projectId, { shutdownTimeout: '20 seconds' }))
+            .toThrow(/invalid shutdownTimeout "20 seconds"/);
+    });
+});
+
 describe('Worker locks and shutdown', () => {
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => jest.useRealTimers());
@@ -144,20 +238,20 @@ describe('Worker locks and shutdown', () => {
         taskType: 'payment',
     } as unknown as ExternalJob;
 
-    function apiError(status: number): ApiError {
+    function apiError(status: number, body?: unknown): ApiError {
         return new ApiError(
             { method: 'POST', url: '' },
-            { url: '', ok: false, status, statusText: '', body: undefined },
+            { url: '', ok: false, status, statusText: '', body },
             `status ${status}`,
         );
     }
 
     // The first poll hands out one job. Later polls hang until cancelled.
-    function setup(config: WorkerConfig = {}) {
+    function setup(config: WorkerConfig = {}, polled: ExternalJob = job) {
         let polls = 0;
         const calls = {
             poll: jest.fn(() => new CancelablePromise<ExternalJob[]>((resolve) => {
-                if (polls++ === 0) resolve([job]);
+                if (polls++ === 0) resolve([polled]);
             })),
             heartbeat: jest.fn(async (..._args: unknown[]) => {}),
             complete: jest.fn(async (..._args: unknown[]) => {}),
@@ -206,7 +300,27 @@ describe('Worker locks and shutdown', () => {
         expect(calls.heartbeat).toHaveBeenCalledTimes(1);
         expect(calls.complete).not.toHaveBeenCalled();
         expect(calls.throwError).not.toHaveBeenCalled();
-        expect(warnings.filter(m => m.includes('lock lost'))).toHaveLength(1);
+        expect(warnings.filter(m => m.includes('this worker no longer holds the job, aborting the handler'))).toHaveLength(1);
+    });
+
+    test('heartbeats at half of the lock the server granted', async () => {
+        const clamped = { ...job, lockExpiresAt: new Date(Date.now() + 300_000).toISOString() } as ExternalJob;
+        const { w, calls } = setup({}, clamped);
+        let finish: (v: Vars) => void = () => {};
+        w.handle('payment', () => new Promise<Vars>((resolve) => { finish = resolve; }), { lockDuration: '11m' });
+
+        const stop = new AbortController();
+        const running = w.run(stop.signal);
+        await jest.advanceTimersByTimeAsync(149_999);
+        expect(calls.heartbeat).not.toHaveBeenCalled();
+        await jest.advanceTimersByTimeAsync(1);
+        expect(calls.heartbeat).toHaveBeenCalledTimes(1);
+        expect(calls.heartbeat.mock.calls[0][2]).toMatchObject({ lockDuration: '11m' });
+
+        stop.abort();
+        finish(new Vars());
+        await running;
+        expect(calls.complete).toHaveBeenCalledTimes(1);
     });
 
     test('after shutdown starts, a running handler keeps heartbeating and completes', async () => {
@@ -269,13 +383,13 @@ describe('Worker locks and shutdown', () => {
 
     test('a complete 409 is logged as a discarded result', async () => {
         const { w, calls, warnings, errors } = setup();
-        calls.complete.mockRejectedValue(apiError(409));
+        calls.complete.mockRejectedValue(apiError(409, { code: 'CONFLICT', message: 'the job was canceled' }));
         w.handle('payment', async () => new Vars());
 
         const registration = (w as any).registrations.get('payment');
         await (w as any).dispatch(registration, job, new AbortController().signal);
 
-        expect(warnings).toContain('workers: complete wf-1:node-a:1: lock lost, result discarded');
+        expect(warnings).toContain('workers: complete wf-1:node-a:1: result discarded: the job was canceled');
         expect(errors).toHaveLength(0);
     });
 });

@@ -39,7 +39,7 @@ export type ExternalJob = {
      */
     status: ExternalJob.status;
     /**
-     * Remaining retry budget. Decremented each time the worker reports a failure that the BPMN model maps to a retry.
+     * Remaining retry budget. A retryable worker error and a lock that runs out each use one.
      */
     retries?: number;
     /**

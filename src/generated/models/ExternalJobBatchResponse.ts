@@ -14,9 +14,9 @@ export type ExternalJobBatchResponse = {
         /**
          * Outcome for this item:
          * * `completed` - the job was completed successfully.
-         * * `failed` - the job exhausted its retries and surfaced as an incident.
+         * * `failed` - the error was raised on the process, because no retries were left or `retryable` was false. An error boundary catches it, or it raises an incident.
          * * `requeued` - a retry budget remained, the job is back in PENDING.
-         * * `error` - the per-item operation itself failed; the job's state is unchanged.
+         * * `error` - the per-item operation itself failed, and the job's state is unchanged.
          *
          */
         status: 'completed' | 'failed' | 'requeued' | 'error';

@@ -15,7 +15,7 @@ export type PollBpmnJobRequest = {
      */
     clientID: string;
     /**
-     * Exclusive lock duration on each acquired job. Accepts Go duration strings (e.g. `5s`, `2m`). Defaults to `30s`.
+     * How long each acquired job stays locked to this worker without a heartbeat. Accepts Go duration strings (e.g. `5s`, `2m`). Defaults to `30s`, clamped by the server to 10s..5m.
      */
     lockDuration?: string;
     /**

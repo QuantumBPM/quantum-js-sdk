@@ -62,6 +62,13 @@ export type BpmnInstance = {
      */
     definitionSuspended?: boolean;
     /**
+     * True when an instance above this running call-activity child in the
+     * call chain is paused, which pauses this one too. It clears when that
+     * instance is resumed.
+     *
+     */
+    parentSuspended?: boolean;
+    /**
      * Caller-supplied correlation key set when the instance was started. Inherited unchanged on child instances spawned via CallActivity.
      */
     businessId?: string;

@@ -680,7 +680,8 @@ export class DefaultService {
      * accumulate indefinitely, and unfiltered queries grow linearly with
      * that history.
      *
-     * @param businessId Exact-match filter on the caller-supplied correlation key set at start time.
+     * @param businessId Prefix match on the caller-supplied correlation key set at start time.
+     * @param processId Only instances of this process id, in any version. `definitionID` selects one version.
      * @param page
      * @param pageSize
      * @returns BpmnInstancePaginatedResponse OK
@@ -689,11 +690,12 @@ export class DefaultService {
     public listBpmnInstances(
         projectId: string,
         definitionId?: string,
-        status?: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELED',
+        status?: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELED' | 'TERMINATED' | 'TIMED_OUT',
         hasIncident?: boolean,
         suspended?: boolean,
         createdAfter?: string,
         businessId?: string,
+        processId?: string,
         page?: number,
         pageSize?: number,
     ): CancelablePromise<BpmnInstancePaginatedResponse> {
@@ -710,6 +712,7 @@ export class DefaultService {
                 'suspended': suspended,
                 'createdAfter': createdAfter,
                 'businessId': businessId,
+                'processId': processId,
                 'page': page,
                 'pageSize': pageSize,
             },
@@ -720,6 +723,9 @@ export class DefaultService {
      * Starts a new instance of a deployed BPMN process. The returned
      * `workflowID` is the stable execution identifier - use it to fetch
      * state, send signals/messages, complete user tasks, etc.
+     *
+     * A process from a resource that is not deployed yet is refused with a
+     * 400. Drafts only start test instances, see `StartBpmnTestInstance`.
      *
      * @param projectId
      * @param requestBody
@@ -746,6 +752,7 @@ export class DefaultService {
             errors: {
                 400: `Bad Request`,
                 401: `Unauthorized`,
+                404: `Not Found`,
                 500: `Internal Server Error`,
             },
         });
@@ -773,6 +780,11 @@ export class DefaultService {
                 'projectID': projectId,
                 'workflowID': workflowId,
             },
+            errors: {
+                503: `The instance is running but did not answer the state query, typically
+                while Temporal retries a workflow task that timed out. Try again shortly.
+                `,
+            },
         });
     }
     /**
@@ -798,6 +810,10 @@ export class DefaultService {
                 'projectID': projectId,
                 'workflowID': workflowId,
             },
+            errors: {
+                400: `The instance is a call-activity child of a running instance. Cancel the root instance instead.`,
+                404: `No instance has this workflow ID.`,
+            },
         });
     }
     /**
@@ -811,7 +827,7 @@ export class DefaultService {
      * @param taskType Filter jobs by task type
      * @param status Filter jobs by status
      * @param workflowId Filter jobs by workflow ID
-     * @param businessId Exact-match filter on the caller-supplied correlation key.
+     * @param businessId Prefix match on the caller-supplied correlation key.
      * @param createdAfter Only return jobs created at or after this timestamp. Strongly
      * recommended for monitoring views - completed-job records accumulate
      * indefinitely, and unfiltered queries grow linearly with that history.
@@ -852,9 +868,11 @@ export class DefaultService {
      * Poll for external jobs (long-poll)
      * Long-polls for PENDING jobs of a given `taskType`. Returns a batch of
      * jobs (up to `maxJobs`) as soon as any are available, or `204 No Content`
-     * when the timeout elapses with no work. Each returned job is exclusively
-     * leased to the caller for `lockDuration` - call `Heartbeat` to extend
-     * the lock, then `Complete` or `ThrowError` to finalize.
+     * when the timeout elapses with no work. Each returned job is locked to
+     * the caller until `lockDuration` passes without a `Heartbeat`, and for at
+     * most the server's `BPMN_JOB_MAX_HOLD` (30m by default) in total. Finish
+     * with `Complete` or `ThrowError`. A lock that runs out costs the job a
+     * retry, and with no retries left it raises an incident.
      *
      * @param projectId
      * @param requestBody
@@ -873,14 +891,18 @@ export class DefaultService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                400: `An empty \`clientID\`, or a \`lockDuration\` or \`timeout\` that is not a Go duration.`,
+            },
         });
     }
     /**
      * Extend the lock on an acquired job
-     * Refreshes the exclusive lock on a job that the caller previously
-     * acquired via `Poll`. Call this periodically when handling a job that
-     * takes longer than the original `lockDuration`. Other workers cannot
-     * claim the job until the lock expires or the job is completed.
+     * Keeps the caller's lock on a job it acquired via `Poll` for another
+     * `lockDuration`, up to `BPMN_JOB_MAX_HOLD` after the job was handed out.
+     * SDK workers send it at half of the lock the poll granted
+     * (`lockExpiresAt`) while a handler runs.
+     * Other workers cannot claim the job while the lock holds.
      *
      * @param projectId
      * @param executionKey
@@ -909,7 +931,12 @@ export class DefaultService {
             body: requestBody,
             mediaType: 'application/json',
             errors: {
-                404: `Job not found, not owned by this client, or already terminated`,
+                400: `An empty \`clientID\`, or a \`lockDuration\` that is not a Go duration.`,
+                404: `No job has this execution key.`,
+                409: `This worker no longer holds the job. Its lock ran out, another
+                worker holds it, or the job has finished. Stop working on it. The
+                message says when the job was cancelled.
+                `,
             },
         });
     }
@@ -936,10 +963,10 @@ export class DefaultService {
             workflowID: string;
             /**
              * Optional worker identity (the same `clientID` used to poll).
-             * When supplied, the completion is applied only if this worker
-             * still holds the job's lock; a stale worker whose lease lapsed
-             * and whose job a peer re-acquired is rejected as a no-op.
-             * Omit for the legacy unchecked behavior.
+             * When supplied, a worker that no longer holds the job's lock
+             * gets 409 and its result is discarded. Completing a job this
+             * worker already completed answers 200 again. Omit for the
+             * legacy unchecked behavior.
              *
              */
             clientID?: string;
@@ -955,6 +982,13 @@ export class DefaultService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                404: `No job has this execution key.`,
+                409: `This worker no longer holds the job, so the result was discarded.
+                Its lock ran out, another worker holds or completed it, or the job
+                failed or was cancelled. The message says when it was cancelled.
+                `,
+            },
         });
     }
 }

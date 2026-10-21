@@ -54,6 +54,8 @@ export type BpmnIncident = {
      * * `SnapshotSizeExceeded` - A ContinueAsNew snapshot exceeded the configured size cap.
      * * `CallActivityCanceled` - A call-activity child terminated as Canceled out-of-band.
      * * `ExternalRowRefreshError` - A migration could not rewrite a parked wait's external row (job, user task or subscription) against the target definition. Resolving re-runs the refresh.
+     * * `JobLockLost` - An external job's worker lock ran out, by missed heartbeats or the maximum hold, with no retries left.
+     * * `DecisionNotFound` - A business rule task called a decision, or a pinned version of one, that is not deployed.
      * * `Unknown` - Internal error not classified above.
      *
      */
@@ -84,6 +86,8 @@ export namespace BpmnIncident {
      * * `SnapshotSizeExceeded` - A ContinueAsNew snapshot exceeded the configured size cap.
      * * `CallActivityCanceled` - A call-activity child terminated as Canceled out-of-band.
      * * `ExternalRowRefreshError` - A migration could not rewrite a parked wait's external row (job, user task or subscription) against the target definition. Resolving re-runs the refresh.
+     * * `JobLockLost` - An external job's worker lock ran out, by missed heartbeats or the maximum hold, with no retries left.
+     * * `DecisionNotFound` - A business rule task called a decision, or a pinned version of one, that is not deployed.
      * * `Unknown` - Internal error not classified above.
      *
      */
@@ -102,6 +106,8 @@ export namespace BpmnIncident {
         SNAPSHOT_SIZE_EXCEEDED = 'SnapshotSizeExceeded',
         CALL_ACTIVITY_CANCELED = 'CallActivityCanceled',
         EXTERNAL_ROW_REFRESH_ERROR = 'ExternalRowRefreshError',
+        JOB_LOCK_LOST = 'JobLockLost',
+        DECISION_NOT_FOUND = 'DecisionNotFound',
         UNKNOWN = 'Unknown',
     }
 }

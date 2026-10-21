@@ -63,6 +63,7 @@ export type { FeelString } from './models/FeelString';
 export type { FeelValue } from './models/FeelValue';
 export type { FeelWarning } from './models/FeelWarning';
 export type { HitRule } from './models/HitRule';
+export type { JoinArrivals } from './models/JoinArrivals';
 export type { MigrateBpmnInstanceRequest } from './models/MigrateBpmnInstanceRequest';
 export type { MigrationValidationResult } from './models/MigrationValidationResult';
 export { ModificationInstruction } from './models/ModificationInstruction';

@@ -13,11 +13,7 @@
  */
 export type BpmnIncidentRecord = {
     /**
-     * Surrogate row identifier; stable across resolves.
-     */
-    id: string;
-    /**
-     * Engine-assigned incident identifier, unique within the workflow.
+     * Engine-assigned incident identifier, unique within the workflow. Resolve the incident with it.
      */
     incidentID: string;
     /**
@@ -104,6 +100,8 @@ export namespace BpmnIncidentRecord {
         SNAPSHOT_SIZE_EXCEEDED = 'SnapshotSizeExceeded',
         CALL_ACTIVITY_CANCELED = 'CallActivityCanceled',
         EXTERNAL_ROW_REFRESH_ERROR = 'ExternalRowRefreshError',
+        JOB_LOCK_LOST = 'JobLockLost',
+        DECISION_NOT_FOUND = 'DecisionNotFound',
         UNKNOWN = 'Unknown',
     }
 }

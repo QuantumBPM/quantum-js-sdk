@@ -39,7 +39,9 @@ export interface PageOptions {
 
 export interface InstanceListOptions extends PageOptions {
     definitionId?: string;
-    status?: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELED';
+    /** Instances of every version of this process id. */
+    processId?: string;
+    status?: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELED' | 'TERMINATED' | 'TIMED_OUT';
     /**
      * Filter by incident presence. `true` shows only instances that
      * need operator attention; `false` excludes them; omit for all.
@@ -56,7 +58,7 @@ export interface InstanceListOptions extends PageOptions {
      */
     createdAfter?: string;
     /**
-     * Exact-match filter on the caller-supplied correlation key set
+     * Prefix filter on the caller-supplied correlation key set
      * at startInstance time.
      */
     businessId?: string;
@@ -209,8 +211,8 @@ export class BpmnClient {
     /** Page of instances in the project. */
     async listInstances(opts: InstanceListOptions = {}): Promise<BpmnInstancePaginatedResponse> {
         // Generated signature order: (projectId, definitionId, status,
-        // hasIncident, suspended, createdAfter, businessId, page, pageSize).
-        // Positional call - keep the order in sync with the regenerated client.
+        // hasIncident, suspended, createdAfter, businessId, processId, page,
+        // pageSize). Positional call - keep the order in sync with the regenerated client.
         return this.raw.default.listBpmnInstances(
             this.projectId,
             opts.definitionId,
@@ -219,6 +221,7 @@ export class BpmnClient {
             opts.suspended,
             opts.createdAfter,
             opts.businessId,
+            opts.processId,
             opts.page,
             opts.pageSize,
         );

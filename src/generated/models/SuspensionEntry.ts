@@ -12,9 +12,9 @@
  */
 export type SuspensionEntry = {
     /**
-     * Unix epoch nanoseconds at which the suspension was applied.
+     * When the suspension was applied.
      */
-    suspendedAt: number;
+    suspendedAt: string;
     /**
      * Identifier of the operator (or service account) that initiated the suspension.
      */

@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { ActiveScope } from './ActiveScope';
 import type { BpmnIncident } from './BpmnIncident';
+import type { JoinArrivals } from './JoinArrivals';
 import type { SuspensionEntry } from './SuspensionEntry';
 /**
  * Full runtime state of a BPMN process instance.
@@ -68,6 +69,18 @@ export type BpmnInstanceState = {
      *
      */
     definitionSuspension?: SuspensionEntry;
+    /**
+     * Present on a call-activity child while an instance above it in the
+     * call chain is suspended, carrying that suspension. It clears when that
+     * instance is resumed. A suspension of the child itself stays until the
+     * child is resumed.
+     *
+     */
+    parentSuspension?: SuspensionEntry;
+    /**
+     * Joins still waiting to fire, with the flows that have reached them.
+     */
+    pendingJoinArrivals?: Array<JoinArrivals>;
     /**
      * Caller-supplied correlation key set when the instance was started.
      */

@@ -68,12 +68,19 @@ export type Handler<TVars = Record<string, unknown>> = (
     signal: AbortSignal,
 ) => Promise<Vars | undefined>;
 
+/**
+ * Durations are Go duration strings such as "30s", "1m30s", "12.5s" or
+ * "500ms". handle() throws on a value that does not parse.
+ */
 export interface HandleOptions {
     /** Maximum jobs in flight for this task type. Default 1. */
     maxJobs?: number;
-    /** Long-poll wait - duration string like "30s", "2m". Default "30s". */
+    /** Long-poll wait. Default "30s". */
     pollTimeout?: string;
-    /** Exclusive lock duration on each acquired job. Default "30s". */
+    /**
+     * Exclusive lock duration on each acquired job. The server clamps it,
+     * by default to between 10s and 5m. Default "30s".
+     */
     lockDuration?: string;
 }
 
@@ -94,8 +101,8 @@ export interface WorkerConfig {
     maxErrorMessageBytes?: number;
     /**
      * How long run waits for running handlers once its signal aborts, as a
-     * duration string like "20s". Handlers still running after it are
-     * aborted and report nothing. Default "20s".
+     * Go duration like "20s" (the constructor throws on an invalid one).
+     * Handlers still running after it are aborted and report nothing. Default "20s".
      */
     shutdownTimeout?: string;
 }
@@ -104,6 +111,7 @@ interface Registration {
     taskType: string;
     handler: Handler<unknown>;
     options: Required<HandleOptions>;
+    lockMs: number;
 }
 
 const DEFAULT_OPTIONS: Required<HandleOptions> = {
@@ -137,22 +145,30 @@ export class Worker {
             config.maxErrorMessageBytes && config.maxErrorMessageBytes > 0
                 ? config.maxErrorMessageBytes
                 : DEFAULT_MAX_ERROR_MESSAGE_BYTES;
-        this.shutdownTimeoutMs = parseDurationMs(config.shutdownTimeout ?? DEFAULT_SHUTDOWN_TIMEOUT) ?? 20_000;
+        this.shutdownTimeoutMs = requireDurationMs('shutdownTimeout', config.shutdownTimeout ?? DEFAULT_SHUTDOWN_TIMEOUT);
     }
 
     /**
      * Register handler as the processor for taskType. Re-registering an
-     * existing taskType replaces the previous handler.
+     * existing taskType replaces the previous handler. Throws when
+     * lockDuration or pollTimeout is not a valid duration.
      */
     handle<TVars = Record<string, unknown>>(
         taskType: string,
         handler: Handler<TVars>,
         options: HandleOptions = {},
     ): this {
+        const opts = { ...DEFAULT_OPTIONS, ...options };
+        const lockMs = requireDurationMs('lockDuration', opts.lockDuration);
+        requireDurationMs('pollTimeout', opts.pollTimeout);
+        // The server rejects a duration with surrounding spaces.
+        opts.lockDuration = opts.lockDuration.trim();
+        opts.pollTimeout = opts.pollTimeout.trim();
         this.registrations.set(taskType, {
             taskType,
             handler: handler as Handler<unknown>,
-            options: { ...DEFAULT_OPTIONS, ...options },
+            options: opts,
+            lockMs,
         });
         return this;
     }
@@ -288,13 +304,12 @@ export class Worker {
     }
 
     /**
-     * Heartbeat at lockDuration / 2, with a 1-second floor, until the returned
-     * stop is called or ac aborts. A 409 or 404 means this worker no longer
-     * holds the job, so it aborts ac.
+     * Heartbeat at heartbeatIntervalMs until the returned stop is called or
+     * ac aborts. A 409 or 404 means this worker no longer holds the job, so
+     * it aborts ac.
      */
     private startHeartbeat(r: Registration, job: ExternalJob, ac: AbortController): () => void {
-        const lockMs = parseDurationMs(r.options.lockDuration) ?? 30_000;
-        const interval = Math.max(1_000, Math.floor(lockMs / 2));
+        const interval = heartbeatIntervalMs(r.lockMs, job.lockExpiresAt, Date.now());
         let stopped = false;
         let inFlight = false;
         const timer = setInterval(async () => {
@@ -309,7 +324,7 @@ export class Worker {
                 if (stopped) return;
                 const status = httpStatus(err);
                 if (status === 409 || status === 404) {
-                    this.logger.warn(`workers: lock lost on ${job.executionKey}, aborting the handler`);
+                    this.logger.warn(`workers: heartbeat ${job.executionKey}: ${conflictReason(err)}, aborting the handler`);
                     ac.abort();
                 } else {
                     this.logger.warn(`workers: heartbeat ${job.executionKey}`, err);
@@ -352,9 +367,9 @@ export class Worker {
     }
 
     private logReportError(op: string, job: ExternalJob, err: unknown): void {
-        // 409 means this worker no longer holds the job's lock.
+        // 409 means this worker no longer holds the job.
         if (httpStatus(err) === 409) {
-            this.logger.warn(`workers: ${op} ${job.executionKey}: lock lost, result discarded`);
+            this.logger.warn(`workers: ${op} ${job.executionKey}: result discarded: ${conflictReason(err)}`);
         } else {
             this.logger.error(`workers: ${op} ${job.executionKey}`, err);
         }
@@ -385,22 +400,60 @@ export class Worker {
     }
 }
 
-function parseDurationMs(d: string): number | null {
-    // Accepts forms like "30s", "2m", "1h", "500ms".
-    const m = /^(\d+)(ms|s|m|h)$/.exec(d.trim());
-    if (!m) return null;
-    const value = parseInt(m[1], 10);
-    switch (m[2]) {
-        case 'ms': return value;
-        case 's': return value * 1_000;
-        case 'm': return value * 60_000;
-        case 'h': return value * 3_600_000;
-        default: return null;
+/**
+ * Half of the lock the server granted, or of the requested lock when that is
+ * shorter, with a 1-second floor. The requested lock alone counts when
+ * lockExpiresAt is missing or not in the future (client clock skew).
+ */
+export function heartbeatIntervalMs(requestedMs: number, lockExpiresAt: string | undefined, nowMs: number): number {
+    const grantedMs = lockExpiresAt ? Date.parse(lockExpiresAt) - nowMs : NaN;
+    const baseMs = grantedMs > 0 ? Math.min(requestedMs, grantedMs) : requestedMs;
+    return Math.max(1_000, Math.floor(baseMs / 2));
+}
+
+const DURATION_UNIT_MS: Record<string, number> = {
+    ns: 1e-6, us: 1e-3, 'µs': 1e-3, 'μs': 1e-3, ms: 1, s: 1_000, m: 60_000, h: 3_600_000,
+};
+const DURATION_RE = /^[-+]?(?:(?:\d+(?:\.\d*)?|\.\d+)(?:ns|us|µs|μs|ms|s|m|h))+$/;
+const DURATION_PART_RE = /(\d+(?:\.\d*)?|\.\d+)(ns|us|µs|μs|ms|s|m|h)/g;
+
+/**
+ * Parses a Go duration string ("30s", "1m30s", "12.5s", "500ms", "0") into
+ * milliseconds, the format the server parses, ignoring surrounding spaces.
+ * Returns null when invalid.
+ */
+export function parseDurationMs(d: string): number | null {
+    if (typeof d !== 'string') return null;
+    d = d.trim();
+    if (/^[-+]?0$/.test(d)) return 0;
+    if (!DURATION_RE.test(d)) return null;
+    let ms = 0;
+    for (const [, value, unit] of d.matchAll(DURATION_PART_RE)) {
+        ms += parseFloat(value) * DURATION_UNIT_MS[unit];
     }
+    return d.startsWith('-') ? -ms : ms;
+}
+
+function requireDurationMs(option: string, value: string): number {
+    const ms = parseDurationMs(value);
+    if (ms === null) {
+        throw new Error(`workers: invalid ${option} ${JSON.stringify(value)}, use a duration such as 30s, 1m30s or 12.5s`);
+    }
+    return ms;
 }
 
 function httpStatus(err: unknown): number | undefined {
     return err instanceof ApiError ? err.status : undefined;
+}
+
+/**
+ * The message of the server's error body, which says why this worker no longer
+ * holds the job, for example that its instance was cancelled.
+ */
+function conflictReason(err: unknown): string {
+    const body = err instanceof ApiError ? err.body : undefined;
+    const message = body && typeof body === 'object' ? (body as { message?: unknown }).message : undefined;
+    return typeof message === 'string' && message ? message : 'this worker no longer holds the job';
 }
 
 /** Resolves once any of `promises` settles or `signal` aborts. */

@@ -51,6 +51,7 @@ describe('BpmnClient.listInstances argument ordering', () => {
             suspended: false,
             createdAfter: '2026-01-01T00:00:00Z',
             businessId: 'ORDER-42',
+            processId: 'order_flow',
             page: 2,
             pageSize: 10,
         });
@@ -64,6 +65,7 @@ describe('BpmnClient.listInstances argument ordering', () => {
             false,
             '2026-01-01T00:00:00Z',
             'ORDER-42',
+            'order_flow',
             2,
             10,
         ]);
@@ -87,6 +89,7 @@ describe('BpmnClient.listInstances argument ordering', () => {
 
         expect(calls[0]).toEqual([
             projectId,
+            undefined,
             undefined,
             undefined,
             undefined,

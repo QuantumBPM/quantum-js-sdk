@@ -12,6 +12,8 @@ export type Error = {
      * * `UNAUTHORIZED` - request lacks or has an invalid authentication token.
      * * `FORBIDDEN` - caller is authenticated but lacks permission, or has hit a quota.
      * * `NOT_FOUND` - the addressed resource does not exist.
+     * * `CONFLICT` - the request collides with the resource's current state, such as reporting on a job this worker no longer holds.
+     * * `UNAVAILABLE` - the resource cannot answer right now, such as a running instance whose workflow task is being retried. Try again shortly.
      * * `INTERNAL_ERROR` - unexpected server-side failure.
      *
      */
@@ -32,6 +34,8 @@ export namespace Error {
      * * `UNAUTHORIZED` - request lacks or has an invalid authentication token.
      * * `FORBIDDEN` - caller is authenticated but lacks permission, or has hit a quota.
      * * `NOT_FOUND` - the addressed resource does not exist.
+     * * `CONFLICT` - the request collides with the resource's current state, such as reporting on a job this worker no longer holds.
+     * * `UNAVAILABLE` - the resource cannot answer right now, such as a running instance whose workflow task is being retried. Try again shortly.
      * * `INTERNAL_ERROR` - unexpected server-side failure.
      *
      */
@@ -40,6 +44,8 @@ export namespace Error {
         UNAUTHORIZED = 'UNAUTHORIZED',
         FORBIDDEN = 'FORBIDDEN',
         NOT_FOUND = 'NOT_FOUND',
+        CONFLICT = 'CONFLICT',
+        UNAVAILABLE = 'UNAVAILABLE',
         INTERNAL_ERROR = 'INTERNAL_ERROR',
     }
 }

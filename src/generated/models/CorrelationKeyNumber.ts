@@ -3,6 +3,6 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * A scalar numeric correlation value.
+ * A scalar numeric correlation value, kept exact (json.Number) so large ids such as order numbers correlate.
  */
 export type CorrelationKeyNumber = number;

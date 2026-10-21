@@ -4,16 +4,23 @@
 /* eslint-disable */
 /**
  * Reassign a CREATED user task. All fields are optional but at least one
- * must be present. Fields are REPLACED atomically - pass the full set of
- * candidateUsers / candidateGroups you want stored, not a delta.
+ * must be present, an empty body is rejected with 400. A field you leave out
+ * keeps its value. A list you send replaces the stored one, so pass the full
+ * set of candidateUsers / candidateGroups you want, not a delta.
  *
  */
 export type UpdateUserTaskAssignmentRequest = {
     /**
-     * New assignee. Pass null to clear.
+     * New assignee. An empty string clears it.
      */
-    assignee?: string | null;
+    assignee?: string;
+    /**
+     * Replaces the candidate users. An empty list clears them.
+     */
     candidateUsers?: Array<string>;
+    /**
+     * Replaces the candidate groups. An empty list clears them.
+     */
     candidateGroups?: Array<string>;
 };
 

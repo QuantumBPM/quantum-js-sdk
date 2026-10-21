@@ -98,6 +98,9 @@ export class BpmnService {
                 'projectID': projectId,
                 'resourceID': resourceId,
             },
+            errors: {
+                404: `Not Found`,
+            },
         });
     }
     /**
@@ -182,14 +185,16 @@ export class BpmnService {
             errors: {
                 400: `Bad Request`,
                 401: `Unauthorized`,
+                404: `Not Found`,
                 500: `Internal Server Error`,
             },
         });
     }
     /**
-     * Start a test instance from a draft resource
-     * Starts a process instance against a draft (non-deployed) resource.
-     * Useful for trying out an in-progress design before deploying.
+     * Start a test instance from a resource
+     * Starts a test instance of a resource, draft or deployed. A draft can
+     * only be started this way, which makes it the way to try out an
+     * in-progress design before deploying.
      * Test instances run with the same engine as production but are flagged
      * so they can be filtered out of dashboards.
      *
@@ -221,6 +226,7 @@ export class BpmnService {
             errors: {
                 400: `Bad Request`,
                 401: `Unauthorized`,
+                404: `Not Found`,
                 500: `Internal Server Error`,
             },
         });
@@ -456,7 +462,7 @@ export class BpmnService {
         definitionId?: string,
         workflowId?: string,
         status?: 'open' | 'resolved',
-        errorType?: 'BpmnError' | 'EscalationError' | 'CompensationError' | 'FeelError' | 'NoHandler' | 'GatewayNoMatch' | 'TimerResolution' | 'LinkNotFound' | 'MigrationError' | 'SubscriptionError' | 'RotationLimitError' | 'SnapshotSizeExceeded' | 'CallActivityCanceled' | 'ExternalRowRefreshError' | 'Unknown',
+        errorType?: 'BpmnError' | 'EscalationError' | 'CompensationError' | 'FeelError' | 'NoHandler' | 'GatewayNoMatch' | 'TimerResolution' | 'LinkNotFound' | 'MigrationError' | 'SubscriptionError' | 'RotationLimitError' | 'SnapshotSizeExceeded' | 'CallActivityCanceled' | 'ExternalRowRefreshError' | 'JobLockLost' | 'DecisionNotFound' | 'Unknown',
         since?: string,
         until?: string,
         page?: number,
@@ -834,10 +840,10 @@ export class BpmnService {
             errorCode: string;
             /**
              * Optional worker identity (the same `clientID` used to poll).
-             * When supplied, the error is applied only if this worker still
-             * holds the job's lock, so a stale report can't requeue or fail
-             * a job a peer is actively holding. Omit for the legacy
-             * unchecked behavior.
+             * When supplied, a worker that no longer holds the job's lock
+             * gets 409 and its report is discarded, so a stale report can't
+             * requeue or fail the job. Omit for the legacy unchecked
+             * behavior.
              *
              */
             clientID?: string;
@@ -865,6 +871,13 @@ export class BpmnService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                404: `No job has this execution key.`,
+                409: `This worker no longer holds the job, so the report was discarded.
+                Its lock ran out, another worker holds it, or the job has finished.
+                The message says when the job was cancelled.
+                `,
+            },
         });
     }
     /**
@@ -884,9 +897,9 @@ export class BpmnService {
             /**
              * Optional worker identity (the same `clientID` used to poll)
              * applied to every item in the batch - a batch is one worker's
-             * report. When supplied, an item is completed only if this
-             * worker still holds its lock; items re-acquired by a peer drop
-             * out silently. Omit for the legacy unchecked behavior.
+             * report. When supplied, an item this worker no longer holds
+             * comes back with status `error` and its result is discarded.
+             * Omit for the legacy unchecked behavior.
              *
              */
             clientID?: string;
@@ -929,10 +942,9 @@ export class BpmnService {
             /**
              * Optional worker identity (the same `clientID` used to poll)
              * applied to every item in the batch - a batch is one worker's
-             * report. When supplied, an item is requeued/failed only if this
-             * worker still holds its lock; items held by a peer are reported
-             * as an error and left untouched. Omit for the legacy unchecked
-             * behavior.
+             * report. When supplied, an item this worker no longer holds
+             * comes back with status `error` and the job is left untouched.
+             * Omit for the legacy unchecked behavior.
              *
              */
             clientID?: string;
@@ -1070,7 +1082,8 @@ export class BpmnService {
     }
     /**
      * Update User Task Assignment
-     * Reassign / change candidates on a CREATED user task. Returns 404 if the
+     * Reassign / change candidates on a CREATED user task. Only the fields in
+     * the body change. Returns 400 for a body with none of them, and 404 if the
      * task does not exist or is no longer in CREATED state. Requires Executor
      * role on the project.
      *
@@ -1095,6 +1108,7 @@ export class BpmnService {
             body: requestBody,
             mediaType: 'application/json',
             errors: {
+                400: `Bad Request`,
                 404: `Not Found`,
             },
         });
@@ -1131,6 +1145,10 @@ export class BpmnService {
             errors: {
                 403: `Forbidden - caller is not Executor and not assigned to the task`,
                 404: `User task not found`,
+                409: `The task is no longer open: it was already completed or failed,
+                possibly by another user a moment earlier, or it was cancelled.
+                Nothing was applied.
+                `,
             },
         });
     }
@@ -1166,6 +1184,10 @@ export class BpmnService {
             errors: {
                 403: `Forbidden - caller is not Executor and not assigned to the task`,
                 404: `User task not found`,
+                409: `The task is no longer open: it was already completed or failed,
+                possibly by another user a moment earlier, or it was cancelled.
+                Nothing was applied.
+                `,
             },
         });
     }
@@ -1213,6 +1235,12 @@ export class BpmnService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                400: `A message start event for \`messageName\` belongs to a suspended
+                process definition, so the message would not start it. Nothing was
+                published or buffered. Publish again once the definition is resumed.
+                `,
+            },
         });
     }
     /**
@@ -1258,6 +1286,12 @@ export class BpmnService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                400: `A signal start event for \`signalName\` belongs to a suspended process
+                definition, so the signal would not start it. Nothing was published
+                or buffered. Publish again once the definition is resumed.
+                `,
+            },
         });
     }
     /**
@@ -1269,7 +1303,7 @@ export class BpmnService {
      * @param projectId
      * @param page
      * @param pageSize
-     * @param q Optional case-insensitive substring match against process id or process name.
+     * @param q Optional case-insensitive prefix match against process id or process name.
      * @param createdAfter Bounds the totalCount aggregate to instances created at or after this
      * timestamp. Strongly recommended for monitoring views - instance
      * history accumulates indefinitely and unfiltered totals scan the full
