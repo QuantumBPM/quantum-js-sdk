@@ -5,7 +5,7 @@
 /**
  * A persisted incident - the cross-instance audit row that backs the
  * "Incidents" view. The same incident is also available in
- * `BpmnInstanceState.incidents` while it is still open in the engine; the
+ * `BpmnInstanceState.incidents` while it is open and the instance runs. The
  * persisted row additionally carries `raisedAt` / `resolvedAt` /
  * `resolvedBy` and the parent process metadata so it can be listed and
  * filtered without joining back to the instance.

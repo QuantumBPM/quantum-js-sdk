@@ -39,11 +39,14 @@ export type BpmnInstanceState = {
      */
     variables?: Record<string, any>;
     /**
-     * True when the instance has an unresolved incident.
+     * True when the instance failed or has an unresolved incident.
      */
     error?: boolean;
     /**
-     * Active incidents that require resolution before the process can continue.
+     * Active incidents that require resolution before the process can
+     * continue. Empty once the instance has finished: the incident list keeps
+     * each one with `resolvedBy` set to `system:<status>`.
+     *
      */
     incidents?: Array<BpmnIncident>;
     /**
