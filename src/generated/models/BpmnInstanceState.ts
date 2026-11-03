@@ -3,7 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ActiveScope } from './ActiveScope';
+import type { BpmnElementStatistics } from './BpmnElementStatistics';
 import type { BpmnIncident } from './BpmnIncident';
+import type { BpmnInstanceStatus } from './BpmnInstanceStatus';
 import type { JoinArrivals } from './JoinArrivals';
 import type { SuspensionEntry } from './SuspensionEntry';
 /**
@@ -11,17 +13,21 @@ import type { SuspensionEntry } from './SuspensionEntry';
  */
 export type BpmnInstanceState = {
     /**
-     * ID of the BPMN resource (definition file) that produced this instance.
+     * ID of the BPMN resource the instance's process version was deployed from. Empty for a version deployed from no resource.
      */
-    resourceID: string;
+    resourceID?: string;
     /**
-     * Execution identifier for this instance.
+     * Identifier of this instance.
      */
-    workflowID?: string;
+    instanceID: string;
     /**
-     * Execution identifier of the parent instance that started this one via a CallActivity. Empty for top-level instances.
+     * Identifier of the parent instance that started this one via a CallActivity. Empty for top-level instances.
      */
-    parentWorkflowID?: string;
+    parentInstanceID?: string;
+    /**
+     * User or service account that started the instance. For an instance a message or signal started, its publisher. Empty for a timer start or a call-activity child.
+     */
+    startedBy?: string;
     /**
      * BPMN process definition ID this instance was started from.
      */
@@ -30,10 +36,7 @@ export type BpmnInstanceState = {
      * Version of the BPMN process definition this instance is currently running. Updated by migration operations.
      */
     processVersion?: number;
-    /**
-     * Current lifecycle status of the instance (e.g. RUNNING, COMPLETED, FAILED, TERMINATED).
-     */
-    status?: string;
+    status?: BpmnInstanceStatus;
     /**
      * All variables currently in scope for the root process.
      */
@@ -42,6 +45,12 @@ export type BpmnInstanceState = {
      * True when the instance failed or has an unresolved incident.
      */
     error?: boolean;
+    /**
+     * True for a test run, see `StartBpmnTestInstance`. Messages and signals
+     * reach it under their names with the `draft:` prefix.
+     *
+     */
+    draft?: boolean;
     /**
      * Active incidents that require resolution before the process can
      * continue. Empty once the instance has finished: the incident list keeps
@@ -54,14 +63,14 @@ export type BpmnInstanceState = {
      */
     activeScopes?: Array<ActiveScope>;
     /**
-     * Error message from the workflow when status is FAILED.
+     * Error message of the instance when status is FAILED.
      */
     failureReason?: string;
     /**
      * Present when this instance has been explicitly suspended by an
-     * operator. Persisted across CaN rotations. Clear via the resume
-     * instance endpoint. Composes with `definitionSuspension` - both must
-     * be null for the instance to dispatch tokens.
+     * operator. Clear via the resume instance endpoint. Composes with
+     * `definitionSuspension` - both must be null for the instance to
+     * dispatch tokens.
      *
      */
     instanceSuspension?: SuspensionEntry;
@@ -84,6 +93,14 @@ export type BpmnInstanceState = {
      * Joins still waiting to fire, with the flows that have reached them.
      */
     pendingJoinArrivals?: Array<JoinArrivals>;
+    /**
+     * The whole history summarised per element ID, so a diagram can show what each element did without reading the history.
+     */
+    elementStatistics?: Record<string, BpmnElementStatistics>;
+    /**
+     * Sequence flows a token has taken, by flow ID.
+     */
+    takenFlows?: Array<string>;
     /**
      * Caller-supplied correlation key set when the instance was started.
      */

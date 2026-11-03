@@ -14,6 +14,12 @@ export type EvaluationResult = {
      */
     decisionID?: string;
     /**
+     * The decision's version, counted per decision id. Present on a decision of a deployed
+     * definition, absent on a draft evaluation.
+     *
+     */
+    decisionVersion?: number;
+    /**
      * Human-readable name of the decision.
      */
     name?: string;

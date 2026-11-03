@@ -73,9 +73,8 @@ describe('Worker job dispatch', () => {
 
     function makeRaw(businessId?: string): ExternalJob {
         return {
-            id: '11111111-1111-1111-1111-111111111111',
             executionKey: 'wf-1:node-a:1',
-            workflowID: 'wf-1',
+            instanceID: 'wf-1',
             nodeID: 'node-a',
             taskType: 'payment',
             status: 'PENDING',
@@ -234,7 +233,7 @@ describe('Worker locks and shutdown', () => {
 
     const job = {
         executionKey: 'wf-1:node-a:1',
-        workflowID: 'wf-1',
+        instanceID: 'wf-1',
         taskType: 'payment',
     } as unknown as ExternalJob;
 

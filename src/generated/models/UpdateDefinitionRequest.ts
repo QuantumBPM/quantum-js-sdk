@@ -3,17 +3,13 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Payload for updating an existing definition version.
+ * Payload for changing a draft DMN definition.
  */
 export type UpdateDefinitionRequest = {
     /**
      * Replacement XML. The `definitionsID` is read from its `<definitions id>`, falling back to the original.
      */
     xml?: string;
-    /**
-     * Omit to overwrite the version in place. 0 stores the change as the next version instead.
-     */
-    version?: number;
     /**
      * New display name.
      */

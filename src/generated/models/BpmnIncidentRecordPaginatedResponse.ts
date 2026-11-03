@@ -3,12 +3,12 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { BpmnIncidentRecord } from './BpmnIncidentRecord';
-import type { PaginationMetadata } from './PaginationMetadata';
+import type { CursorPage } from './CursorPage';
 /**
  * Page of persisted incidents.
  */
 export type BpmnIncidentRecordPaginatedResponse = {
     data: Array<BpmnIncidentRecord>;
-    pagination: PaginationMetadata;
+    pagination: CursorPage;
 };
 

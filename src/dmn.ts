@@ -66,25 +66,6 @@ export class DmnClient {
         );
     }
 
-    /**
-     * Run a stored DMN definition addressed by its platform UUID. Prefer
-     * evaluate() (by definitions ID) for normal use; this overload is for
-     * callers that already hold a specific version pointer.
-     */
-    async evaluateById(
-        definitionId: string,
-        vars: Vars,
-        opts: EvaluateOptions = {},
-    ): Promise<DmnResult> {
-        return this.raw.default.evaluateStored(this.projectId, definitionId, {
-            context: vars.toFeelContext(),
-            version: opts.version,
-            decisions: opts.decisions,
-            decisionServices: opts.decisionServices,
-            businessId: opts.businessId,
-        });
-    }
-
     /** Run ad-hoc DMN XML against an input context. The XML is not stored. */
     async evaluateDesign(
         xml: string,

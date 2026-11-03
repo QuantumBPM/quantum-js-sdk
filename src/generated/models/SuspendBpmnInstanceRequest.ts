@@ -7,7 +7,7 @@
  */
 export type SuspendBpmnInstanceRequest = {
     /**
-     * Free-text rationale. Surfaces in the operator UI and the workflow's history audit.
+     * Free-text rationale. Surfaces in the operator UI and the instance's history.
      */
     reason?: string;
 };

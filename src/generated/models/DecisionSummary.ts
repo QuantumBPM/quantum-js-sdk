@@ -20,11 +20,11 @@ export type DecisionSummary = {
      */
     definitionsID: string;
     /**
-     * Human-readable name of the parent DMN definition.
+     * Human-readable name of the DMN definition the latest version came from.
      */
     definitionName: string;
     /**
-     * Highest deployed version that contains this decision.
+     * The decision's latest deployed version, counted per decision id. A business rule task that binds a version names this number.
      */
     latestVersion: number;
     /**

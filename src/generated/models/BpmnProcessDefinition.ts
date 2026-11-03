@@ -3,13 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * A single deployable process parsed out of a BPMN resource.
+ * A deployed process version from a BPMN resource. `processID` and `version` address it.
  */
 export type BpmnProcessDefinition = {
-    /**
-     * Platform identifier of this process definition. Used as `processDefinitionID` when starting instances.
-     */
-    id: string;
     /**
      * Platform identifier of the owning BPMN resource.
      */
@@ -30,6 +26,10 @@ export type BpmnProcessDefinition = {
      * Timestamp when this version became available.
      */
     createdAt: string;
+    /**
+     * User or service account that deployed this version.
+     */
+    deployedBy?: string;
     /**
      * Timestamp at which this process definition was paused. Empty when active.
      */

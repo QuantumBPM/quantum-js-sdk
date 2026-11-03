@@ -3,13 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * A unit of work emitted by a BPMN service task that an external worker is expected to handle.
+ * A unit of work emitted by a BPMN service task that an external worker is expected to handle. A job is kept until its instance ends, and from then on its instance's history holds it.
  */
 export type ExternalJob = {
-    /**
-     * Unique identifier of this job record.
-     */
-    id: string;
     /**
      * Stable key for the activity execution that produced the job. Used as the path parameter when completing or failing the job.
      */
@@ -17,7 +13,7 @@ export type ExternalJob = {
     /**
      * Identifier of the instance that produced the job. Required when calling Complete / ThrowError.
      */
-    workflowID: string;
+    instanceID: string;
     /**
      * ID of the BPMN service-task node.
      */
@@ -33,7 +29,7 @@ export type ExternalJob = {
     /**
      * Identifier of the parent instance (set when the producing instance was started by a CallActivity).
      */
-    parentWorkflowID?: string;
+    parentInstanceID?: string;
     /**
      * Lifecycle status of the job.
      */
@@ -55,6 +51,10 @@ export type ExternalJob = {
      */
     completedAt?: string;
     /**
+     * User or service account that reported the job's outcome. Empty while pending, and for a job the engine ended itself.
+     */
+    completedBy?: string;
+    /**
      * Worker `clientID` that currently holds the exclusive lock on the job.
      */
     lockedBy?: string;
@@ -63,7 +63,7 @@ export type ExternalJob = {
      */
     lockExpiresAt?: string;
     /**
-     * Best-effort label describing why a CANCELED job was interrupted (e.g. instance cancelled, instance terminated).
+     * Best-effort label describing why a CANCELED job was interrupted (e.g. an interrupting boundary event, a migration).
      */
     cancelReason?: string;
     /**

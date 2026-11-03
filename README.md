@@ -15,7 +15,7 @@ Node.js 18+ (uses native `AbortController` and `AbortSignal`).
 | Module                                            | Purpose                                                                       |
 | ------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `QuantumBPM`                                      | Top-level client exposing `.dmn` and `.bpmn`, plus `newWorker(...)`           |
-| `ZitadelTokenProvider`, `StaticTokenProvider`     | Authentication. Implement `TokenProvider` for BYO providers                   |
+| `ClientCredentialsTokenProvider`, `StaticTokenProvider` | Authentication. Implement `TokenProvider` for BYO providers             |
 | `DmnClient`                                       | DMN evaluation: stored definitions, ad-hoc XML, batch                         |
 | `BpmnClient`                                      | BPMN resources, instances, messaging, user tasks, processes                   |
 | `Worker`                                          | External job worker runtime - long-poll, lock heartbeat, dispatch             |
@@ -25,16 +25,16 @@ Node.js 18+ (uses native `AbortController` and `AbortSignal`).
 ## Quick start
 
 ```typescript
-import { QuantumBPM, Vars, ZitadelTokenProvider } from '@quantumbpm/sdk';
+import { ClientCredentialsTokenProvider, QuantumBPM, Vars } from '@quantumbpm/sdk';
 
-const provider = new ZitadelTokenProvider(
-    './service-account.json',         // Zitadel JSON Key file
-    'https://auth.quantumbpm.com',    // issuer
-    'your-zitadel-project-id',        // audience scope
-);
+const provider = new ClientCredentialsTokenProvider({
+    tokenUrl: 'https://idp.example.com/realms/acme/protocol/openid-connect/token',
+    clientId: 'billing-svc',
+    clientSecret: process.env.QUANTUMBPM_CLIENT_SECRET!,
+});
 
 const client = new QuantumBPM({
-    baseUrl: 'https://api.quantumbpm.com',
+    baseUrl: 'https://quantumbpm.example.com',
     projectId: '00000000-0000-0000-0000-000000000000',
     tokenProvider: provider,
 });
@@ -50,21 +50,31 @@ console.log(result);
 
 The `TokenProvider` interface returns a bearer token on each request. Two implementations ship out of the box.
 
-### Zitadel service account
+### OAuth 2.0 client credentials
+
+`ClientCredentialsTokenProvider` fetches access tokens from your OIDC identity provider (Keycloak, Microsoft Entra ID, Okta, Auth0 and others) with the client credentials grant. Register a confidential client for your service at the identity provider and pass its token endpoint and credentials:
 
 ```typescript
-const provider = new ZitadelTokenProvider(
-    './service-account.json',         // path to JSON Key file
-    'https://auth.quantumbpm.com',    // issuer URL
-    'your-zitadel-project-id',        // adds the audience scope
-);
+import { ClientCredentialsTokenProvider } from '@quantumbpm/sdk';
+
+const provider = new ClientCredentialsTokenProvider({
+    tokenUrl: 'https://idp.example.com/realms/acme/protocol/openid-connect/token',
+    clientId: 'billing-svc',
+    clientSecret: process.env.QUANTUMBPM_CLIENT_SECRET!,
+    scopes: ['openid'],       // optional
+    audience: 'quantumbpm',   // optional, some providers such as Auth0 require it
+});
 ```
 
-The provider caches tokens in-memory until shortly before expiry.
+The exact token endpoint depends on the identity provider. The provider's OIDC discovery document (`/.well-known/openid-configuration`) lists it as `token_endpoint`.
+
+`scopes` are sent space-joined as the `scope` parameter and `audience` as the `audience` parameter. Each is left out of the request when empty. The client must be set up at the identity provider so its tokens carry the audience and roles your QuantumBPM deployment expects.
+
+The provider caches the token and fetches a new one once less than 60 seconds of its lifetime remain. Parallel callers share one in-flight token request. A non-2xx response from the token endpoint rejects with an `Error` that carries the HTTP status and response body.
 
 ### Static bearer token
 
-For Enterprise deployments that issue long-lived API keys, or in tests where a token is acquired out of band:
+For a token acquired out of band, for example by another library or in tests:
 
 ```typescript
 import { StaticTokenProvider } from '@quantumbpm/sdk';
@@ -111,14 +121,6 @@ const result = await client.dmn.evaluate('loan-eligibility', vars, {
 });
 ```
 
-### Evaluate by platform UUID
-
-When you already hold a database-version pointer:
-
-```typescript
-const result = await client.dmn.evaluateById(definitionUuid, vars);
-```
-
 ### Ad-hoc XML evaluation
 
 For "evaluate while editing" flows that don't store the XML:
@@ -152,13 +154,13 @@ const batch = await client.dmn.evaluateDesignBatch(dmnXml, rows);
 const draft = await client.bpmn.createResource('loan-process', bpmnXml);
 await client.bpmn.deployResource(draft.id);
 
-// Re-fetch to get the populated process-definition list.
+// Re-fetch to get the process versions the deploy created.
 const deployed = await client.bpmn.getResource(draft.id);
 const processDef = deployed.processes![0];
 
-// Start an instance.
-const workflowId = await client.bpmn.startInstance(
-    processDef.id,
+// Start an instance of the latest version. Pass { version } to pick one.
+const instanceId = await client.bpmn.startInstance(
+    processDef.processID,
     new Vars().set('applicantID', 'u-123').set('requestedAmt', 25000),
 );
 ```
@@ -166,12 +168,19 @@ const workflowId = await client.bpmn.startInstance(
 ### Inspect runtime state
 
 ```typescript
-const state = await client.bpmn.getInstance(workflowId);
+const state = await client.bpmn.getInstance(instanceId);
 console.log(state.status, state.activeScopes);
 
-const vars = await client.bpmn.getInstanceVariables(workflowId);
+const vars = await client.bpmn.getInstanceVariables(instanceId);
 
-const children = await client.bpmn.getInstanceChildren(workflowId);
+const children = await client.bpmn.getInstanceChildren(instanceId);
+
+// History pages run oldest first. Without options a page holds the newest
+// entries, and an entry read by its seq carries its inputs and outputs.
+const page = await client.bpmn.getInstanceHistory(instanceId, { fromSeq: 1, limit: 100 });
+const entry = await client.bpmn.getInstanceHistoryEntry(instanceId, page.items[0].seq!);
+
+const version = await client.bpmn.getProcessVersion('loan-process', 2);
 ```
 
 ### Send messages and signals
@@ -196,6 +205,20 @@ const page = await client.bpmn.listUserTasks({
     assignee: 'alice@example.com',
     status: 'CREATED',
 });
+
+// Lists of instances and user tasks page by cursor: pass the page's
+// nextCursor back for the next one. It is absent on the last page.
+if (page.pagination.nextCursor) {
+    const next = await client.bpmn.listUserTasks({
+        assignee: 'alice@example.com',
+        status: 'CREATED',
+        cursor: page.pagination.nextCursor,
+    });
+}
+
+// The caller's tasks soonest due first, and the project's overdue ones.
+const mine = await client.bpmn.listUserTasksForCaller({ sort: 'dueDate' });
+const overdue = await client.bpmn.listUserTasks({ status: 'CREATED', dueBefore: new Date().toISOString() });
 
 await client.bpmn.completeUserTask(executionKey, new Vars().set('approved', true));
 
@@ -240,13 +263,13 @@ worker.handle('send-email', handler, {
 
 Concurrency is per task type. Different task types run independently.
 
-The server clamps `lockDuration` to between 10s and 5m by default (`BPMN_WORKER_LEASE_MIN` / `BPMN_WORKER_LEASE_MAX`) and returns the expiry it granted with each job (`lockExpiresAt`). While the handler runs, the runtime heartbeats at half of the granted lock, or half of `lockDuration` when that is shorter, with a 1s floor. A `lockDuration` of `'11m'` therefore heartbeats every 150s under the default 5m cap.
+The server clamps `lockDuration` to between 10s and 5m by default (`ENGINE_WORKER_LOCK_MIN` / `ENGINE_WORKER_LOCK_MAX`) and returns the expiry it granted with each job (`lockExpiresAt`). While the handler runs, the runtime heartbeats at half of the granted lock, or half of `lockDuration` when that is shorter, with a 1s floor. A `lockDuration` of `'11m'` therefore heartbeats every 150s under the default 5m cap.
 
 `lockDuration`, `pollTimeout` and `shutdownTimeout` take Go duration strings, the format the server parses: a sequence of numbers with optional fractions and a unit each, such as `'30s'`, `'12.5s'`, `'1m30s'`, `'500ms'` or `'1.5h'`. Units are `ns`, `us` (or `µs`), `ms`, `s`, `m` and `h`. An invalid value throws: `handle()` throws for `lockDuration` and `pollTimeout`, `newWorker()` throws for `shutdownTimeout`.
 
 ### Lost locks
 
-Each polled job is locked to the worker's `clientId`, and heartbeats keep that lock while the handler runs. The server caps one attempt at 30 minutes by default (`BPMN_JOB_MAX_HOLD`). If the lock runs out, the server charges the job a retry and offers it again, or raises an incident when no retries are left.
+Each polled job is locked to the worker's `clientId`, and heartbeats keep that lock while the handler runs. The server caps one attempt at 30 minutes by default (`ENGINE_JOB_MAX_HOLD`). If the lock runs out, the server charges the job a retry and offers it again, or raises an incident when no retries are left.
 
 When a heartbeat finds the lock gone, the runtime aborts the handler's `signal` and reports nothing for that job. A result reported after the lock is gone is discarded by the server and logged as a warning. Pass the signal to your I/O so the handler stops early:
 
@@ -350,7 +373,7 @@ If you need currency-grade round-trips through a JS worker or client, represent 
 The `client.raw` property exposes the underlying generated client for endpoints not yet wrapped (instance migration, modification, ad-hoc triggers, batch job complete/error, etc.):
 
 ```typescript
-await client.raw.bpmn.migrateBpmnInstance(client.projectId, workflowId, body);
+await client.raw.bpmn.migrateBpmnInstance(client.projectId, instanceId, body);
 ```
 
 ## License

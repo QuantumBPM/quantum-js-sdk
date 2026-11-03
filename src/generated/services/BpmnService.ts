@@ -2,9 +2,12 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { BpmnActivityState } from '../models/BpmnActivityState';
+import type { BpmnHistoryPage } from '../models/BpmnHistoryPage';
 import type { BpmnIncidentRecordPaginatedResponse } from '../models/BpmnIncidentRecordPaginatedResponse';
 import type { BpmnInstanceChildrenResponse } from '../models/BpmnInstanceChildrenResponse';
 import type { BpmnProcessSummaryPaginatedResponse } from '../models/BpmnProcessSummaryPaginatedResponse';
+import type { BpmnProcessVersion } from '../models/BpmnProcessVersion';
 import type { BpmnProcessVersionPaginatedResponse } from '../models/BpmnProcessVersionPaginatedResponse';
 import type { BpmnResourceDetail } from '../models/BpmnResourceDetail';
 import type { BpmnResourcePaginatedResponse } from '../models/BpmnResourcePaginatedResponse';
@@ -58,7 +61,9 @@ export class BpmnService {
      * Create a BPMN resource
      * Uploads a new BPMN XML resource as a draft. Drafts can be edited and
      * tested but cannot start production instances until they are deployed.
-     * The XML is validated; invalid XML is rejected.
+     * Invalid XML is rejected. XML identical to the latest deployed resource
+     * of the same `<definitions id>` is refused with 409, and nothing is
+     * saved.
      *
      * @param projectId
      * @param requestBody
@@ -77,6 +82,9 @@ export class BpmnService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                409: `Conflict`,
+            },
         });
     }
     /**
@@ -129,7 +137,7 @@ export class BpmnService {
             body: requestBody,
             mediaType: 'application/json',
             errors: {
-                409: `Conflict - resource is already deployed`,
+                409: `Conflict`,
             },
         });
     }
@@ -156,15 +164,18 @@ export class BpmnService {
                 'resourceID': resourceId,
             },
             errors: {
-                409: `Conflict - resource has running instances`,
+                409: `Conflict`,
             },
         });
     }
     /**
      * Deploy a BPMN resource
      * Marks all processes inside the resource as executable, making them
-     * available to start instances of. Deployment is one-way; to change a
-     * deployed resource, upload a new version and deploy that.
+     * available to start instances of. Each of them gets its next version.
+     * Deployment is one-way. To change a deployed resource, upload a new
+     * version and deploy that. A resource identical to the latest deployed
+     * resource of the same `<definitions id>` is refused with 409, and
+     * deploying that latest one again changes nothing.
      *
      * @param projectId
      * @param resourceId
@@ -186,6 +197,7 @@ export class BpmnService {
                 400: `Bad Request`,
                 401: `Unauthorized`,
                 404: `Not Found`,
+                409: `Conflict`,
                 500: `Internal Server Error`,
             },
         });
@@ -194,9 +206,19 @@ export class BpmnService {
      * Start a test instance from a resource
      * Starts a test instance of a resource, draft or deployed. A draft can
      * only be started this way, which makes it the way to try out an
-     * in-progress design before deploying.
-     * Test instances run with the same engine as production but are flagged
-     * so they can be filtered out of dashboards.
+     * in-progress design before deploying. A suspended definition does not
+     * stop it, since the test run takes no deployed version.
+     *
+     * A test run runs on the same engine as production but stays apart from
+     * it, and so do its call-activity children. It stays a test run for
+     * life, also after a migration to a deployed version.
+     * - Its job task types, message names and signal names carry the
+     * `draft:` prefix. A worker activates `draft:<type>` to work its jobs,
+     * and a publish names `draft:<name>` to reach it.
+     * - Its user tasks, jobs and incidents list only when `instanceID` names
+     * it.
+     * - Instance counts, analytics and job queue depth leave it out. The
+     * instance list shows it, with `draft` set.
      *
      * @param projectId
      * @param resourceId
@@ -210,9 +232,9 @@ export class BpmnService {
         requestBody: StartBpmnTestInstanceRequest,
     ): CancelablePromise<{
         /**
-         * Stable execution identifier of the new test instance.
+         * Identifier of the new test instance.
          */
-        workflowID?: string;
+        instanceID?: string;
     }> {
         return this.httpRequest.request({
             method: 'POST',
@@ -263,7 +285,7 @@ export class BpmnService {
     }
     /**
      * List all versions of a BPMN resource
-     * Returns every stored version of a resource identified by the BPMN XML's outer `definitions` id, oldest to newest.
+     * Returns every stored version of a resource identified by the BPMN XML's outer `definitions` id, newest first.
      * @param projectId
      * @param definitionsId
      * @param page
@@ -324,23 +346,23 @@ export class BpmnService {
      * List child instances of a BPMN instance
      * Returns instances that this instance spawned via CallActivity elements.
      * Useful for navigating into a multi-level process hierarchy (parents
-     * can be discovered via `parentWorkflowID` on the child).
+     * can be discovered via `parentInstanceID` on the child).
      *
      * @param projectId
-     * @param workflowId
+     * @param instanceId
      * @returns BpmnInstanceChildrenResponse OK
      * @throws ApiError
      */
     public getBpmnInstanceChildren(
         projectId: string,
-        workflowId: string,
+        instanceId: string,
     ): CancelablePromise<BpmnInstanceChildrenResponse> {
         return this.httpRequest.request({
             method: 'GET',
-            url: '/projects/{projectID}/bpmn/instances/{workflowID}/children',
+            url: '/projects/{projectID}/bpmn/instances/{instanceID}/children',
             path: {
                 'projectID': projectId,
-                'workflowID': workflowId,
+                'instanceID': instanceId,
             },
         });
     }
@@ -348,22 +370,22 @@ export class BpmnService {
      * Get BPMN instance variables
      * Returns the current variables in the root scope of a running or completed instance.
      * @param projectId
-     * @param workflowId
+     * @param instanceId
      * @returns any OK
      * @throws ApiError
      */
     public getBpmnInstanceVariables(
         projectId: string,
-        workflowId: string,
+        instanceId: string,
     ): CancelablePromise<{
         variables?: Record<string, any>;
     }> {
         return this.httpRequest.request({
             method: 'GET',
-            url: '/projects/{projectID}/bpmn/instances/{workflowID}/variables',
+            url: '/projects/{projectID}/bpmn/instances/{instanceID}/variables',
             path: {
                 'projectID': projectId,
-                'workflowID': workflowId,
+                'instanceID': instanceId,
             },
         });
     }
@@ -375,27 +397,102 @@ export class BpmnService {
      * payload are kept; pass `null` to clear a key.
      *
      * @param projectId
-     * @param workflowId
+     * @param instanceId
      * @param requestBody
      * @returns any OK
      * @throws ApiError
      */
     public updateBpmnInstanceVariables(
         projectId: string,
-        workflowId: string,
+        instanceId: string,
         requestBody: {
             variables: Record<string, any>;
         },
     ): CancelablePromise<any> {
         return this.httpRequest.request({
             method: 'PUT',
-            url: '/projects/{projectID}/bpmn/instances/{workflowID}/variables',
+            url: '/projects/{projectID}/bpmn/instances/{instanceID}/variables',
             path: {
                 'projectID': projectId,
-                'workflowID': workflowId,
+                'instanceID': instanceId,
             },
             body: requestBody,
             mediaType: 'application/json',
+        });
+    }
+    /**
+     * Get a page of a BPMN instance's history
+     * A window of an instance's BPMN history, oldest first, for a running or
+     * an ended instance. Without a cursor it is the newest entries.
+     * `beforeSeq` reads the entries before one, to walk back, and `fromSeq`
+     * the entries from one on, to follow a running instance. Every entry
+     * carries its `seq`.
+     *
+     * Page entries leave out `inputs` and `outputs`, so a page costs the same
+     * however long the history is. Read one entry's payload from
+     * `GetBpmnInstanceHistoryEntry`. The diagram needs no history at all: the
+     * instance state's `elementStatistics` and `takenFlows` summarise it.
+     *
+     * @param projectId
+     * @param instanceId
+     * @param fromSeq Read the entries from this seq on. Takes precedence over `beforeSeq`.
+     * @param beforeSeq Read the newest entries before this seq.
+     * @param limit Max entries per page. Clamped server-side to the engine's max page size.
+     * @returns BpmnHistoryPage OK
+     * @throws ApiError
+     */
+    public getBpmnInstanceHistory(
+        projectId: string,
+        instanceId: string,
+        fromSeq?: number,
+        beforeSeq?: number,
+        limit?: number,
+    ): CancelablePromise<BpmnHistoryPage> {
+        return this.httpRequest.request({
+            method: 'GET',
+            url: '/projects/{projectID}/bpmn/instances/{instanceID}/history',
+            path: {
+                'projectID': projectId,
+                'instanceID': instanceId,
+            },
+            query: {
+                'fromSeq': fromSeq,
+                'beforeSeq': beforeSeq,
+                'limit': limit,
+            },
+            errors: {
+                404: `Not Found`,
+            },
+        });
+    }
+    /**
+     * Get one BPMN history entry with its payload
+     * One history entry with its `inputs` and `outputs`. The engine rebuilds
+     * them from the variable writes of every entry before it, so the read
+     * grows with the entry's position: around 0.3 s at entry 40,000.
+     *
+     * @param projectId
+     * @param instanceId
+     * @param seq
+     * @returns BpmnActivityState OK
+     * @throws ApiError
+     */
+    public getBpmnInstanceHistoryEntry(
+        projectId: string,
+        instanceId: string,
+        seq: number,
+    ): CancelablePromise<BpmnActivityState> {
+        return this.httpRequest.request({
+            method: 'GET',
+            url: '/projects/{projectID}/bpmn/instances/{instanceID}/history/{seq}',
+            path: {
+                'projectID': projectId,
+                'instanceID': instanceId,
+                'seq': seq,
+            },
+            errors: {
+                404: `Not Found`,
+            },
         });
     }
     /**
@@ -406,7 +503,7 @@ export class BpmnService {
      * that triggered a FEEL evaluation error).
      *
      * @param projectId
-     * @param workflowId
+     * @param instanceId
      * @param incidentId
      * @param requestBody
      * @returns any OK
@@ -414,7 +511,7 @@ export class BpmnService {
      */
     public resolveBpmnIncident(
         projectId: string,
-        workflowId: string,
+        instanceId: string,
         incidentId: string,
         requestBody?: {
             variables?: Record<string, any>;
@@ -422,10 +519,10 @@ export class BpmnService {
     ): CancelablePromise<any> {
         return this.httpRequest.request({
             method: 'POST',
-            url: '/projects/{projectID}/bpmn/instances/{workflowID}/incidents/{incidentID}/resolve',
+            url: '/projects/{projectID}/bpmn/instances/{instanceID}/incidents/{incidentID}/resolve',
             path: {
                 'projectID': projectId,
-                'workflowID': workflowId,
+                'instanceID': instanceId,
                 'incidentID': incidentId,
             },
             body: requestBody,
@@ -436,37 +533,39 @@ export class BpmnService {
      * List BPMN incidents
      * Cross-instance audit listing of incidents in the project. By default
      * returns open incidents first (unresolved), ordered by recency.
-     * Filterable by definition, error type, status, and time window.
+     * Filterable by process version, error type, status, and time window.
      *
      * Each row carries the parent process metadata (processID, processName)
      * so a single page render needs no follow-up queries against the
      * instances endpoint. Click-through to a specific instance still uses
-     * the workflow-scoped detail endpoint.
+     * the instance detail endpoint.
      *
      * @param projectId
-     * @param definitionId Restrict to incidents on instances of a single process definition.
-     * @param workflowId Restrict to incidents on a single instance - useful for an instance-detail "all incidents ever raised here" view that includes resolved rows.
+     * @param processId Restrict to incidents on instances of one process, in any version unless `version` names one.
+     * @param version Restrict to one version of `processID`. Ignored without `processID`.
+     * @param instanceId Restrict to incidents on a single instance - useful for an instance-detail "all incidents ever raised here" view that includes resolved rows. A test run's incidents list only by its instance.
      * @param status Filter by lifecycle status. `open` returns unresolved incidents;
      * `resolved` returns only resolved ones. Omit to return both.
      *
      * @param errorType Restrict to a single error category (matches `BpmnIncidentRecord.errorType`).
      * @param since Earliest `raisedAt` to include (inclusive).
      * @param until Latest `raisedAt` to include (exclusive).
-     * @param page
-     * @param pageSize
+     * @param cursor The `nextCursor` of the page before, absent for the first page.
+     * @param limit Most incidents per page, 20 by default and 100 at most.
      * @returns BpmnIncidentRecordPaginatedResponse OK
      * @throws ApiError
      */
     public listBpmnIncidents(
         projectId: string,
-        definitionId?: string,
-        workflowId?: string,
+        processId?: string,
+        version?: number,
+        instanceId?: string,
         status?: 'open' | 'resolved',
-        errorType?: 'BpmnError' | 'EscalationError' | 'CompensationError' | 'FeelError' | 'NoHandler' | 'GatewayNoMatch' | 'TimerResolution' | 'LinkNotFound' | 'MigrationError' | 'SubscriptionError' | 'RotationLimitError' | 'SnapshotSizeExceeded' | 'CallActivityCanceled' | 'ExternalRowRefreshError' | 'JobLockLost' | 'DecisionNotFound' | 'Unknown',
+        errorType?: 'BpmnError' | 'CompensationError' | 'FeelError' | 'GatewayNoMatch' | 'TimerResolution' | 'LinkNotFound' | 'MigrationError' | 'CallActivityCanceled' | 'ExternalRowRefreshError' | 'JobLockLost' | 'DecisionNotFound' | 'DecisionEvaluationError' | 'ProcessNotFound' | 'ProcessSuspended' | 'Unknown',
         since?: string,
         until?: string,
-        page?: number,
-        pageSize?: number,
+        cursor?: string,
+        limit?: number,
     ): CancelablePromise<BpmnIncidentRecordPaginatedResponse> {
         return this.httpRequest.request({
             method: 'GET',
@@ -475,14 +574,15 @@ export class BpmnService {
                 'projectID': projectId,
             },
             query: {
-                'definitionID': definitionId,
-                'workflowID': workflowId,
+                'processID': processId,
+                'version': version,
+                'instanceID': instanceId,
                 'status': status,
                 'errorType': errorType,
                 'since': since,
                 'until': until,
-                'page': page,
-                'pageSize': pageSize,
+                'cursor': cursor,
+                'limit': limit,
             },
         });
     }
@@ -494,22 +594,22 @@ export class BpmnService {
      * and target. Validate the migration plan first via `MigrateValidate`.
      *
      * @param projectId
-     * @param workflowId
+     * @param instanceId
      * @param requestBody
      * @returns any OK
      * @throws ApiError
      */
     public migrateBpmnInstance(
         projectId: string,
-        workflowId: string,
+        instanceId: string,
         requestBody: MigrateBpmnInstanceRequest,
     ): CancelablePromise<any> {
         return this.httpRequest.request({
             method: 'POST',
-            url: '/projects/{projectID}/bpmn/instances/{workflowID}/migrate',
+            url: '/projects/{projectID}/bpmn/instances/{instanceID}/migrate',
             path: {
                 'projectID': projectId,
-                'workflowID': workflowId,
+                'instanceID': instanceId,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -523,22 +623,22 @@ export class BpmnService {
      * to the user.
      *
      * @param projectId
-     * @param workflowId
+     * @param instanceId
      * @param requestBody
      * @returns MigrationValidationResult OK
      * @throws ApiError
      */
     public validateBpmnInstanceMigration(
         projectId: string,
-        workflowId: string,
+        instanceId: string,
         requestBody: MigrateBpmnInstanceRequest,
     ): CancelablePromise<MigrationValidationResult> {
         return this.httpRequest.request({
             method: 'POST',
-            url: '/projects/{projectID}/bpmn/instances/{workflowID}/migrate/validate',
+            url: '/projects/{projectID}/bpmn/instances/{instanceID}/migrate/validate',
             path: {
                 'projectID': projectId,
-                'workflowID': workflowId,
+                'instanceID': instanceId,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -559,22 +659,22 @@ export class BpmnService {
      * A batch is applied whole or not at all.
      *
      * @param projectId
-     * @param workflowId
+     * @param instanceId
      * @param requestBody
      * @returns any OK
      * @throws ApiError
      */
     public modifyBpmnInstance(
         projectId: string,
-        workflowId: string,
+        instanceId: string,
         requestBody: ModifyBpmnInstanceRequest,
     ): CancelablePromise<any> {
         return this.httpRequest.request({
             method: 'POST',
-            url: '/projects/{projectID}/bpmn/instances/{workflowID}/modify',
+            url: '/projects/{projectID}/bpmn/instances/{instanceID}/modify',
             path: {
                 'projectID': projectId,
-                'workflowID': workflowId,
+                'instanceID': instanceId,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -591,7 +691,7 @@ export class BpmnService {
      * can be triggered repeatedly until the ad-hoc subprocess completes.
      *
      * @param projectId
-     * @param workflowId
+     * @param instanceId
      * @param adHocNodeId
      * @param requestBody
      * @returns any OK
@@ -599,7 +699,7 @@ export class BpmnService {
      */
     public triggerBpmnAdHocNode(
         projectId: string,
-        workflowId: string,
+        instanceId: string,
         adHocNodeId: string,
         requestBody: {
             nodeID: string;
@@ -607,10 +707,10 @@ export class BpmnService {
     ): CancelablePromise<any> {
         return this.httpRequest.request({
             method: 'POST',
-            url: '/projects/{projectID}/bpmn/instances/{workflowID}/adhoc/{adHocNodeID}/trigger',
+            url: '/projects/{projectID}/bpmn/instances/{instanceID}/adhoc/{adHocNodeID}/trigger',
             path: {
                 'projectID': projectId,
-                'workflowID': workflowId,
+                'instanceID': instanceId,
                 'adHocNodeID': adHocNodeId,
             },
             body: requestBody,
@@ -624,7 +724,7 @@ export class BpmnService {
      * values, which may cause the subprocess to complete or branch.
      *
      * @param projectId
-     * @param workflowId
+     * @param instanceId
      * @param adHocNodeId
      * @param requestBody
      * @returns any OK
@@ -632,7 +732,7 @@ export class BpmnService {
      */
     public setBpmnAdHocVariables(
         projectId: string,
-        workflowId: string,
+        instanceId: string,
         adHocNodeId: string,
         requestBody: {
             variables?: Record<string, any>;
@@ -640,10 +740,10 @@ export class BpmnService {
     ): CancelablePromise<any> {
         return this.httpRequest.request({
             method: 'POST',
-            url: '/projects/{projectID}/bpmn/instances/{workflowID}/adhoc/{adHocNodeID}/variables',
+            url: '/projects/{projectID}/bpmn/instances/{instanceID}/adhoc/{adHocNodeID}/variables',
             path: {
                 'projectID': projectId,
-                'workflowID': workflowId,
+                'instanceID': instanceId,
                 'adHocNodeID': adHocNodeId,
             },
             body: requestBody,
@@ -657,32 +757,32 @@ export class BpmnService {
      * flag layers on top. Idempotent - a second call against an already-
      * suspended instance is a no-op.
      *
-     * While suspended: cancel / terminate / migrate / force-rotate / resolve-
-     * incident / variable update / modify all still work. Parked tokens
-     * released by signal demuxes or timer fires queue internally and dispatch
-     * on resume.
+     * While suspended, cancel, terminate, resolve-incident and variable
+     * update still apply. Anything else that reaches the instance, such as a
+     * job completion, a message or a due timer, applies on resume, in the
+     * order it arrived.
      *
-     * The audit (operator, reason, timestamp) is also recorded in the
-     * workflow's Temporal history as a `SuspendInstanceEvent` so the timeline
-     * view on the instance detail page can render the cycle.
+     * The suspension (operator, reason, timestamp) is also recorded in the
+     * instance's history as a `SuspendInstanceEvent`, so the timeline view on
+     * the instance detail page can render the cycle.
      *
      * @param projectId
-     * @param workflowId
+     * @param instanceId
      * @param requestBody
      * @returns void
      * @throws ApiError
      */
     public suspendBpmnInstance(
         projectId: string,
-        workflowId: string,
+        instanceId: string,
         requestBody?: SuspendBpmnInstanceRequest,
     ): CancelablePromise<void> {
         return this.httpRequest.request({
             method: 'POST',
-            url: '/projects/{projectID}/bpmn/instances/{workflowID}/suspend',
+            url: '/projects/{projectID}/bpmn/instances/{instanceID}/suspend',
             path: {
                 'projectID': projectId,
-                'workflowID': workflowId,
+                'instanceID': instanceId,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -695,91 +795,93 @@ export class BpmnService {
      * is resumed as well. Idempotent.
      *
      * @param projectId
-     * @param workflowId
+     * @param instanceId
      * @returns void
      * @throws ApiError
      */
     public resumeBpmnInstance(
         projectId: string,
-        workflowId: string,
+        instanceId: string,
     ): CancelablePromise<void> {
         return this.httpRequest.request({
             method: 'POST',
-            url: '/projects/{projectID}/bpmn/instances/{workflowID}/resume',
+            url: '/projects/{projectID}/bpmn/instances/{instanceID}/resume',
             path: {
                 'projectID': projectId,
-                'workflowID': workflowId,
+                'instanceID': instanceId,
             },
         });
     }
     /**
-     * Suspend every running instance of a BPMN definition
-     * Pauses every running instance of one deployed process definition AND
-     * rejects new instance starts on that definition until it is resumed.
+     * Suspend a deployed version of a BPMN process
+     * Pauses every running instance of one deployed process version AND
+     * rejects new instance starts on that version until it is resumed.
      *
-     * The handler acquires a row-level lock on the definition before flipping
-     * the flag so a `StartBpmnInstance` racing the suspend can't slip through.
-     * It then iterates over every running instance (`status='RUNNING'`) and
-     * sends each one a definition-scope suspend signal via the engine API.
      * Instances that were also explicitly instance-suspended stay paused
      * after a definition-scope resume - the operator must clear that scope
      * too.
      *
-     * Idempotent. The reason cascades to every affected instance's history
-     * audit (`SuspendDefinitionEvent`) so the UI can render where the pause
-     * came from.
+     * Idempotent. Suspending again reaches the running instances an earlier
+     * call missed. The reason reaches every affected instance's history
+     * (`SuspendDefinitionEvent`) so the UI can render where the pause came
+     * from.
      *
      * @param projectId
-     * @param definitionId Platform identifier of the process definition version (same UUID `BpmnProcessVersion.id` exposes).
+     * @param processId
+     * @param version
      * @param requestBody
      * @returns void
      * @throws ApiError
      */
     public suspendBpmnDefinition(
         projectId: string,
-        definitionId: string,
+        processId: string,
+        version: number,
         requestBody?: SuspendBpmnDefinitionRequest,
     ): CancelablePromise<void> {
         return this.httpRequest.request({
             method: 'POST',
-            url: '/projects/{projectID}/bpmn/definitions/{definitionID}/suspend',
+            url: '/projects/{projectID}/bpmn/processes/{processID}/versions/{version}/suspend',
             path: {
                 'projectID': projectId,
-                'definitionID': definitionId,
+                'processID': processId,
+                'version': version,
             },
             body: requestBody,
             mediaType: 'application/json',
             errors: {
-                404: `Definition not found`,
+                404: `Process version not found`,
             },
         });
     }
     /**
-     * Resume a suspended BPMN definition
-     * Clears the definition-scope suspension and fans out a resume signal to
-     * every running instance of the definition. Instances that were also
-     * instance-suspended stay paused until their own scope is cleared. New
-     * instance starts are accepted again once the definition flag clears.
-     * Idempotent.
+     * Resume a suspended version of a BPMN process
+     * Clears the definition-scope suspension and resumes every running
+     * instance of the version. Instances that were also instance-suspended
+     * stay paused until their own scope is cleared. New instance starts are
+     * accepted again. Idempotent.
      *
      * @param projectId
-     * @param definitionId
+     * @param processId
+     * @param version
      * @returns void
      * @throws ApiError
      */
     public resumeBpmnDefinition(
         projectId: string,
-        definitionId: string,
+        processId: string,
+        version: number,
     ): CancelablePromise<void> {
         return this.httpRequest.request({
             method: 'POST',
-            url: '/projects/{projectID}/bpmn/definitions/{definitionID}/resume',
+            url: '/projects/{projectID}/bpmn/processes/{processID}/versions/{version}/resume',
             path: {
                 'projectID': projectId,
-                'definitionID': definitionId,
+                'processID': processId,
+                'version': version,
             },
             errors: {
-                404: `Definition not found`,
+                404: `Process version not found`,
             },
         });
     }
@@ -827,6 +929,9 @@ export class BpmnService {
      * never fix (e.g. `PAYMENT_DECLINED`). SDK workers send this automatically
      * when a handler throws a typed `BpmnError`.
      *
+     * Once the instance has ended, any report on its jobs answers 200 and
+     * changes nothing.
+     *
      * @param projectId
      * @param executionKey
      * @param requestBody
@@ -837,13 +942,19 @@ export class BpmnService {
         projectId: string,
         executionKey: string,
         requestBody: {
+            /**
+             * Instance ID returned by the poll response.
+             */
+            instanceID: string;
             errorCode: string;
             /**
              * Optional worker identity (the same `clientID` used to poll).
              * When supplied, a worker that no longer holds the job's lock
              * gets 409 and its report is discarded, so a stale report can't
-             * requeue or fail the job. Omit for the legacy unchecked
-             * behavior.
+             * requeue or fail the job. Repeating the report this worker last
+             * made on the job answers 200 again and changes nothing. Without
+             * it, the report applies to an open job no worker holds a live
+             * lock on.
              *
              */
             clientID?: string;
@@ -872,10 +983,12 @@ export class BpmnService {
             body: requestBody,
             mediaType: 'application/json',
             errors: {
-                404: `No job has this execution key.`,
-                409: `This worker no longer holds the job, so the report was discarded.
-                Its lock ran out, another worker holds it, or the job has finished.
-                The message says when the job was cancelled.
+                404: `The instance is running and has no job with this execution key.`,
+                409: `The report was discarded. This worker no longer holds the job: its
+                lock ran out, another worker holds it, or the job has finished.
+                Without a \`clientID\`, a worker holds a live lock on the job, named in
+                the message, or the job already ended. The message says when the job
+                was cancelled.
                 `,
             },
         });
@@ -898,14 +1011,16 @@ export class BpmnService {
              * Optional worker identity (the same `clientID` used to poll)
              * applied to every item in the batch - a batch is one worker's
              * report. When supplied, an item this worker no longer holds
-             * comes back with status `error` and its result is discarded.
-             * Omit for the legacy unchecked behavior.
+             * comes back with status `error` and its result is discarded,
+             * and repeating this worker's last report on an item changes
+             * nothing. Without it, an item a worker holds a live lock on, or
+             * one that already ended, comes back with status `error`.
              *
              */
             clientID?: string;
             items: Array<{
                 executionKey: string;
-                workflowID: string;
+                instanceID: string;
                 variables?: Record<string, any>;
             }>;
         },
@@ -943,8 +1058,10 @@ export class BpmnService {
              * Optional worker identity (the same `clientID` used to poll)
              * applied to every item in the batch - a batch is one worker's
              * report. When supplied, an item this worker no longer holds
-             * comes back with status `error` and the job is left untouched.
-             * Omit for the legacy unchecked behavior.
+             * comes back with status `error` and the job is left untouched,
+             * and repeating this worker's last report on an item changes
+             * nothing. Without it, an item a worker holds a live lock on, or
+             * one that already ended, comes back with status `error`.
              *
              */
             clientID?: string;
@@ -959,7 +1076,7 @@ export class BpmnService {
             retryable?: boolean;
             items: Array<{
                 executionKey: string;
-                workflowID: string;
+                instanceID: string;
                 errorCode: string;
                 variables?: Record<string, any>;
             }>;
@@ -978,31 +1095,41 @@ export class BpmnService {
     /**
      * List User Tasks
      * Paginated list of user tasks for the project, optionally filtered by
-     * workflow, status, assignee, candidate user or candidate group.
+     * instance, status, assignee, candidate user, candidate group or due date.
      * Requires Executor role on the project.
      *
      * @param projectId
-     * @param workflowId
+     * @param instanceId Only this instance's tasks. A test run's tasks list only by its instance.
      * @param status
      * @param assignee
      * @param candidateUser
      * @param candidateGroup
      * @param businessId Exact-match filter on the caller-supplied correlation key.
-     * @param page
-     * @param pageSize
+     * @param dueAfter Only tasks due at or after this time.
+     * @param dueBefore Only tasks due before this time. With `status=CREATED` and the current time, the overdue tasks.
+     * @param sort `created` lists the newest first, and is the default. `dueDate` lists
+     * the soonest due first and tasks without a due date last. `priority`
+     * lists the highest priority first. Both list the oldest first among
+     * equals. A cursor continues only a list of the same sort.
+     *
+     * @param cursor The `nextCursor` of the page before, absent for the first page.
+     * @param limit Most tasks per page, 20 by default and 100 at most.
      * @returns BpmnUserTaskPaginatedResponse OK
      * @throws ApiError
      */
     public listBpmnUserTasks(
         projectId: string,
-        workflowId?: string,
+        instanceId?: string,
         status?: 'CREATED' | 'COMPLETED' | 'CANCELED' | 'FAILED',
         assignee?: string,
         candidateUser?: string,
         candidateGroup?: string,
         businessId?: string,
-        page?: number,
-        pageSize?: number,
+        dueAfter?: string,
+        dueBefore?: string,
+        sort?: 'created' | 'dueDate' | 'priority',
+        cursor?: string,
+        limit?: number,
     ): CancelablePromise<BpmnUserTaskPaginatedResponse> {
         return this.httpRequest.request({
             method: 'GET',
@@ -1011,14 +1138,17 @@ export class BpmnService {
                 'projectID': projectId,
             },
             query: {
-                'workflowID': workflowId,
+                'instanceID': instanceId,
                 'status': status,
                 'assignee': assignee,
                 'candidateUser': candidateUser,
                 'candidateGroup': candidateGroup,
                 'businessId': businessId,
-                'page': page,
-                'pageSize': pageSize,
+                'dueAfter': dueAfter,
+                'dueBefore': dueBefore,
+                'sort': sort,
+                'cursor': cursor,
+                'limit': limit,
             },
         });
     }
@@ -1029,15 +1159,25 @@ export class BpmnService {
      * the caller's identity-provider groups. Requires Viewer role on the project.
      *
      * @param projectId
-     * @param page
-     * @param pageSize
+     * @param dueAfter Only tasks due at or after this time.
+     * @param dueBefore Only tasks due before this time. With the current time, the caller's overdue tasks.
+     * @param sort `created` lists the newest first, and is the default. `dueDate` lists
+     * the soonest due first and tasks without a due date last. `priority`
+     * lists the highest priority first. Both list the oldest first among
+     * equals. A cursor continues only a list of the same sort.
+     *
+     * @param cursor The `nextCursor` of the page before, absent for the first page.
+     * @param limit Most tasks per page, 20 by default and 100 at most.
      * @returns BpmnUserTaskPaginatedResponse OK
      * @throws ApiError
      */
     public listBpmnUserTasksForCaller(
         projectId: string,
-        page?: number,
-        pageSize?: number,
+        dueAfter?: string,
+        dueBefore?: string,
+        sort?: 'created' | 'dueDate' | 'priority',
+        cursor?: string,
+        limit?: number,
     ): CancelablePromise<BpmnUserTaskPaginatedResponse> {
         return this.httpRequest.request({
             method: 'GET',
@@ -1046,8 +1186,11 @@ export class BpmnService {
                 'projectID': projectId,
             },
             query: {
-                'page': page,
-                'pageSize': pageSize,
+                'dueAfter': dueAfter,
+                'dueBefore': dueBefore,
+                'sort': sort,
+                'cursor': cursor,
+                'limit': limit,
             },
         });
     }
@@ -1195,7 +1338,7 @@ export class BpmnService {
      * Publish a BPMN message
      * Publishes a message into the project. Each message is delivered to at
      * most one waiting catch event whose subscription matches `messageName`
-     * and whose correlation keys are a subset of `correlationKeys`. If no
+     * and whose correlation value equals `correlationKeys`. If no
      * subscriber is currently waiting the message is buffered up to its TTL
      * and delivered to the first matching subscriber that registers.
      *
@@ -1303,11 +1446,11 @@ export class BpmnService {
      * @param projectId
      * @param page
      * @param pageSize
-     * @param q Optional case-insensitive prefix match against process id or process name.
+     * @param q Optional case-insensitive substring match against process id or process name.
      * @param createdAfter Bounds the totalCount aggregate to instances created at or after this
-     * timestamp. Strongly recommended for monitoring views - instance
-     * history accumulates indefinitely and unfiltered totals scan the full
-     * table per definition. runningCount ignores this filter (it is always
+     * timestamp. Strongly recommended for monitoring views - ended
+     * instances stay until retention deletes them, and unfiltered totals
+     * scan every kept instance per definition. runningCount ignores this filter (it is always
      * point-in-time).
      *
      * @param suspended Filter by paused versions. `true` → only processes with at least one
@@ -1388,6 +1531,46 @@ export class BpmnService {
             },
             errors: {
                 401: `Unauthorized`,
+                500: `Internal Server Error`,
+            },
+        });
+    }
+    /**
+     * Get one deployed version of a BPMN process
+     * Returns the single deployed version identified by (processID, version)
+     * with its instance counts and suspension state, wherever it falls in the
+     * pages of `ListBpmnProcessVersions`.
+     *
+     * @param projectId
+     * @param processId
+     * @param version
+     * @param createdAfter Bounds the totalCount aggregate to instances created at or after this
+     * timestamp. See ListBpmnProcesses for rationale. runningCount ignores
+     * this filter.
+     *
+     * @returns BpmnProcessVersion OK
+     * @throws ApiError
+     */
+    public getBpmnProcessVersion(
+        projectId: string,
+        processId: string,
+        version: number,
+        createdAfter?: string,
+    ): CancelablePromise<BpmnProcessVersion> {
+        return this.httpRequest.request({
+            method: 'GET',
+            url: '/projects/{projectID}/bpmn/processes/{processID}/versions/{version}',
+            path: {
+                'projectID': projectId,
+                'processID': processId,
+                'version': version,
+            },
+            query: {
+                'createdAfter': createdAfter,
+            },
+            errors: {
+                401: `Unauthorized`,
+                404: `Not Found`,
                 500: `Internal Server Error`,
             },
         });

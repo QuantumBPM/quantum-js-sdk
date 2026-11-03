@@ -3,21 +3,17 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * One deployed version of a process, with instance counts.
+ * One deployed version of a process, with instance counts. `processID` and `version` address it.
  */
 export type BpmnProcessVersion = {
     /**
-     * Platform identifier of this process definition version. Use it to filter instances or as the source/target of a migration.
+     * BPMN resource version it was deployed from. Empty for a version deployed from no resource.
      */
-    id: string;
+    resourceID?: string;
     /**
-     * Owning BPMN resource version.
+     * Display name of that resource.
      */
-    resourceID: string;
-    /**
-     * Display name of the owning resource.
-     */
-    resourceName: string;
+    resourceName?: string;
     /**
      * BPMN process id.
      */
@@ -34,6 +30,10 @@ export type BpmnProcessVersion = {
      * Timestamp when this version was deployed.
      */
     createdAt: string;
+    /**
+     * User or service account that deployed this version.
+     */
+    deployedBy?: string;
     /**
      * Instances of this version with status RUNNING.
      */

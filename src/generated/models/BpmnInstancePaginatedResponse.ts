@@ -3,12 +3,12 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { BpmnInstance } from './BpmnInstance';
-import type { PaginationMetadata } from './PaginationMetadata';
+import type { CursorPage } from './CursorPage';
 /**
  * Page of BPMN process instances.
  */
 export type BpmnInstancePaginatedResponse = {
     data: Array<BpmnInstance>;
-    pagination: PaginationMetadata;
+    pagination: CursorPage;
 };
 

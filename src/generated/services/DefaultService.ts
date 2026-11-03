@@ -8,7 +8,7 @@ import type { BpmnExternalJobPaginatedResponse } from '../models/BpmnExternalJob
 import type { BpmnInstancePaginatedResponse } from '../models/BpmnInstancePaginatedResponse';
 import type { BpmnInstanceState } from '../models/BpmnInstanceState';
 import type { CreateDefinitionRequest } from '../models/CreateDefinitionRequest';
-import type { CreateProjectRequest } from '../models/CreateProjectRequest';
+import type { DecisionVersionList } from '../models/DecisionVersionList';
 import type { Definition } from '../models/Definition';
 import type { ErrorMode } from '../models/ErrorMode';
 import type { EvaluateStoredRequest } from '../models/EvaluateStoredRequest';
@@ -34,8 +34,6 @@ export class DefaultService {
      */
     public getVersion(): CancelablePromise<{
         version?: string;
-        buildTime?: string;
-        commit?: string;
     }> {
         return this.httpRequest.request({
             method: 'GET',
@@ -112,7 +110,9 @@ export class DefaultService {
     }
     /**
      * List Projects
-     * Lists projects the caller has access to within their account.
+     * Lists the projects the caller's token grants access to. Projects come
+     * from the deployment's provisioning file.
+     *
      * @returns Project OK
      * @throws ApiError
      */
@@ -121,31 +121,6 @@ export class DefaultService {
             method: 'GET',
             url: '/projects',
             errors: {
-                500: `Internal Server Error`,
-            },
-        });
-    }
-    /**
-     * Create Project
-     * Creates a new project. Projects are workspaces that group DMN definitions
-     * and BPMN processes for execution and access control. The caller is
-     * automatically added as a project administrator.
-     *
-     * @param requestBody
-     * @returns Project Created
-     * @throws ApiError
-     */
-    public createProject(
-        requestBody: CreateProjectRequest,
-    ): CancelablePromise<Project> {
-        return this.httpRequest.request({
-            method: 'POST',
-            url: '/projects',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                400: `Bad Request`,
-                403: `Project quota for the caller's tier has been reached.`,
                 500: `Internal Server Error`,
             },
         });
@@ -174,35 +149,8 @@ export class DefaultService {
         });
     }
     /**
-     * Delete Project
-     * Permanently deletes a project and all of its data: DMN definitions and
-     * executions, BPMN resources and instances, jobs, user tasks, messages,
-     * signals, and members. Running BPMN instances are terminated. This
-     * action cannot be undone.
-     *
-     * @param projectId Identifier of the project to delete.
-     * @returns void
-     * @throws ApiError
-     */
-    public deleteProject(
-        projectId: string,
-    ): CancelablePromise<void> {
-        return this.httpRequest.request({
-            method: 'DELETE',
-            url: '/projects/{projectID}',
-            path: {
-                'projectID': projectId,
-            },
-            errors: {
-                400: `Bad Request`,
-                404: `Not Found`,
-                500: `Internal Server Error`,
-            },
-        });
-    }
-    /**
      * List DMN definitions
-     * Lists all definition versions in the project. Each call to `CreateDefinition` produces a new version.
+     * Lists every saved definition in the project, drafts and deployed, newest first.
      * @param projectId
      * @param page Page number (1-indexed)
      * @param pageSize Number of items per page (max 100)
@@ -233,9 +181,11 @@ export class DefaultService {
     }
     /**
      * Create a DMN definition
-     * Stores a new DMN definition. Each call creates a new version
-     * (auto-incremented). To replace an existing definition, post the new
-     * XML with the same `definitionsID`.
+     * Saves a new draft. A draft is not evaluable until `DeployDefinition`
+     * deploys it. To change a deployed definition, save its new XML as
+     * another draft of the same `definitionsID` and deploy that. XML
+     * identical to the latest deployed version of its `definitionsID` is
+     * refused with 409, and nothing is saved.
      *
      * @param projectId
      * @param requestBody
@@ -257,13 +207,14 @@ export class DefaultService {
             errors: {
                 400: `Bad Request`,
                 404: `Not Found`,
+                409: `Conflict`,
                 500: `Internal Server Error`,
             },
         });
     }
     /**
      * List latest DMN definitions
-     * Returns the most recent version of each unique definition. Use this for picking a definition to evaluate.
+     * Returns the newest saved definition of each `definitionsID`, draft or deployed.
      * @param projectId
      * @param page Page number (1-indexed)
      * @param pageSize Number of items per page (max 100)
@@ -294,13 +245,14 @@ export class DefaultService {
     }
     /**
      * Get a DMN definition by its DMN definitions id
-     * Looks up a definition by the `id` attribute on the `<definitions>` root
-     * element of the DMN XML, instead of by the platform-internal `id`.
-     * Returns the latest version unless a specific version is requested.
+     * Looks up a deployed definition by the `id` attribute on the
+     * `<definitions>` root element of the DMN XML, instead of by the
+     * platform-internal `id`. Returns the latest deployed version unless
+     * `version` names one. A draft is not found this way.
      *
      * @param projectId
      * @param definitionsId Stable identifier from the DMN XML's outer `<definitions id="…">` attribute.
-     * @param version Specific version number (defaults to latest version)
+     * @param version Deployed version, the latest when omitted.
      * @returns Definition OK
      * @throws ApiError
      */
@@ -327,7 +279,7 @@ export class DefaultService {
     }
     /**
      * List all versions of a DMN definition
-     * Returns every stored version of a definition identified by its DMN `<definitions id>`, newest to oldest.
+     * Returns every saved definition of a DMN `<definitions id>`, drafts and deployed, newest first. A deployed one carries the version its deploy gave it.
      * @param projectId
      * @param definitionsId Stable identifier from the DMN XML's outer `<definitions id="…">` attribute.
      * @param page Page number (1-indexed)
@@ -361,15 +313,15 @@ export class DefaultService {
     }
     /**
      * Evaluate a DMN definition by its DMN definitions id
-     * Evaluates a stored DMN definition addressed by its `<definitions id>`
-     * XML attribute. Useful when callers know definitions by their DMN-level
-     * identifier rather than the platform's internal `id`. Defaults to the
-     * latest deployed version.
+     * Evaluates a deployed DMN definition addressed by its `<definitions id>`
+     * XML attribute, the latest deployed version unless `version` names one,
+     * and records the evaluation. A definition with no deployed version
+     * answers 404. Drafts evaluate through `EvaluateDesign`.
      *
      * @param projectId
      * @param definitionsId Stable identifier from the DMN XML's outer `<definitions id="…">` attribute.
      * @param requestBody
-     * @param version Specific version number (defaults to latest version)
+     * @param version Deployed version, the latest when omitted.
      * @returns EvaluationResult OK
      * @throws ApiError
      */
@@ -426,7 +378,7 @@ export class DefaultService {
     }
     /**
      * Update a DMN definition version
-     * Replaces the name and XML of a stored definition version in place. Send `version` 0 to store the change as the next version of the same definition instead.
+     * Replaces the name and XML of a draft. A deployed definition is read-only and answers 409, so save the change as a new draft instead.
      * @param projectId
      * @param definitionId
      * @param requestBody
@@ -450,13 +402,14 @@ export class DefaultService {
             errors: {
                 400: `Bad Request`,
                 404: `Not Found`,
+                409: `Conflict`,
                 500: `Internal Server Error`,
             },
         });
     }
     /**
      * Delete a DMN definition version
-     * Permanently deletes a single definition version. Past executions of this version remain in history.
+     * Permanently deletes a draft. A deployed definition answers 409, since the engine keeps its version and evaluations.
      * @param projectId
      * @param definitionId
      * @returns void
@@ -476,91 +429,48 @@ export class DefaultService {
             errors: {
                 400: `Bad Request`,
                 404: `Not Found`,
+                409: `Conflict`,
                 500: `Internal Server Error`,
             },
         });
     }
     /**
-     * Evaluate a stored DMN definition
-     * Evaluates a stored DMN definition against the supplied context.
-     * Each call is recorded in execution history and counts toward the
-     * account's evaluation quota.
+     * Deploy a DMN definition
+     * Deploys a draft, which makes its decisions evaluable and callable from
+     * business rule tasks. Its document gets the next version of its
+     * `definitionsID`, and each decision the next version of its decision id.
+     * A draft identical to the latest deployed version is refused with 409. A
+     * deployed definition is read-only, and deploying it again answers 409.
      *
      * @param projectId
      * @param definitionId
-     * @param requestBody
-     * @returns EvaluationResult OK
+     * @returns Definition OK
      * @throws ApiError
      */
-    public evaluateStored(
+    public deployDefinition(
         projectId: string,
         definitionId: string,
-        requestBody: EvaluateStoredRequest,
-    ): CancelablePromise<Record<string, EvaluationResult>> {
+    ): CancelablePromise<Definition> {
         return this.httpRequest.request({
             method: 'POST',
-            url: '/projects/{projectID}/dmn/definitions/{definitionID}/evaluate',
+            url: '/projects/{projectID}/dmn/definitions/{definitionID}/deploy',
             path: {
                 'projectID': projectId,
                 'definitionID': definitionId,
             },
-            body: requestBody,
-            mediaType: 'application/json',
             errors: {
                 400: `Bad Request`,
                 404: `Not Found`,
-                500: `Internal Server Error`,
-            },
-        });
-    }
-    /**
-     * List executions of a DMN definition
-     * Returns paginated execution history for a single definition.
-     * @param projectId
-     * @param definitionId
-     * @param definitionsId Filter by DMN `<definitions id>` (XML id).
-     * @param startDate Filter executions after this date (ISO 8601)
-     * @param businessId Exact-match filter on the caller-supplied correlation key.
-     * @param page Page number (1-indexed)
-     * @param pageSize Number of items per page (max 100)
-     * @returns PaginatedExecutionsResponse OK
-     * @throws ApiError
-     */
-    public listExecutions(
-        projectId: string,
-        definitionId: string,
-        definitionsId?: string,
-        startDate?: string,
-        businessId?: string,
-        page: number = 1,
-        pageSize: number = 20,
-    ): CancelablePromise<PaginatedExecutionsResponse> {
-        return this.httpRequest.request({
-            method: 'GET',
-            url: '/projects/{projectID}/dmn/definitions/{definitionID}/executions',
-            path: {
-                'projectID': projectId,
-                'definitionID': definitionId,
-            },
-            query: {
-                'definitionsID': definitionsId,
-                'startDate': startDate,
-                'businessId': businessId,
-                'page': page,
-                'pageSize': pageSize,
-            },
-            errors: {
-                400: `Bad Request`,
-                404: `Not Found`,
+                409: `Conflict`,
                 500: `Internal Server Error`,
             },
         });
     }
     /**
      * List decisions
-     * Returns one row per unique decision XML id in the project, with the
-     * latest known version and the owning definition. Useful for picking
-     * a target decision when wiring a BPMN BusinessRuleTask.
+     * Returns one row per deployed decision in the project, at its latest
+     * version and with the definition that version came from. Useful for
+     * picking a target decision when wiring a BPMN BusinessRuleTask.
      *
      * @param projectId
      * @param page Page number (1-indexed)
@@ -592,10 +502,42 @@ export class DefaultService {
         });
     }
     /**
+     * List a decision's deployed versions
+     * Returns every deployed version of a decision, the latest first, with
+     * the DMN definition version it came from. Decision versions count per
+     * decision id, and a BPMN BusinessRuleTask that binds a version names one
+     * of them.
+     *
+     * @param projectId
+     * @param decisionId ID of the decision node from the DMN XML.
+     * @returns DecisionVersionList OK
+     * @throws ApiError
+     */
+    public listDecisionVersions(
+        projectId: string,
+        decisionId: string,
+    ): CancelablePromise<DecisionVersionList> {
+        return this.httpRequest.request({
+            method: 'GET',
+            url: '/projects/{projectID}/dmn/decisions/{decisionID}/versions',
+            path: {
+                'projectID': projectId,
+                'decisionID': decisionId,
+            },
+            errors: {
+                500: `Internal Server Error`,
+            },
+        });
+    }
+    /**
      * List DMN executions across the project
-     * Returns paginated execution history for the entire project, optionally filtered by DMN definition.
+     * Returns the project's recorded decision evaluations, newest first:
+     * those of `EvaluateByDefinitionsID` and of business rule tasks. A test
+     * run's evaluations are left out.
+     *
      * @param projectId
      * @param definitionsId Filter by DMN `<definitions id>` (XML id).
+     * @param version Only evaluations of this deployed version of `definitionsID`. Ignored without `definitionsID`.
      * @param businessId Exact-match filter on the caller-supplied correlation key.
      * @param startDate Only return executions at or after this instant (ISO 8601). Bounds the scan and the reported total; omit for the full unbounded history.
      * @param page Page number (1-indexed)
@@ -606,6 +548,7 @@ export class DefaultService {
     public listProjectExecutions(
         projectId: string,
         definitionsId?: string,
+        version?: number,
         businessId?: string,
         startDate?: string,
         page: number = 1,
@@ -619,6 +562,7 @@ export class DefaultService {
             },
             query: {
                 'definitionsID': definitionsId,
+                'version': version,
                 'businessId': businessId,
                 'startDate': startDate,
                 'page': page,
@@ -633,7 +577,7 @@ export class DefaultService {
     }
     /**
      * Get a single DMN execution
-     * Returns the inputs, outputs, and per-decision evaluation results for a single past execution.
+     * Returns the inputs and per-decision results of a single recorded evaluation.
      * @param projectId
      * @param executionId
      * @returns Execution OK
@@ -659,9 +603,8 @@ export class DefaultService {
     }
     /**
      * List BPMN instances
-     * Returns paginated process instances in the project, optionally filtered by definition or status.
+     * Returns paginated process instances in the project, optionally filtered by process, version or status.
      * @param projectId
-     * @param definitionId
      * @param status
      * @param hasIncident Filter by whether the instance has at least one unresolved incident.
      * Omit to return all instances regardless of incident status; pass
@@ -676,28 +619,33 @@ export class DefaultService {
      * at a time.
      *
      * @param createdAfter Only return instances created at or after this timestamp. Strongly
-     * recommended for monitoring views - terminal-state instance rows
-     * accumulate indefinitely, and unfiltered queries grow linearly with
+     * recommended for monitoring views - ended instances stay until
+     * retention deletes them, and unfiltered queries grow linearly with
      * that history.
      *
      * @param businessId Prefix match on the caller-supplied correlation key set at start time.
-     * @param processId Only instances of this process id, in any version. `definitionID` selects one version.
-     * @param page
-     * @param pageSize
+     * @param processId Only instances of this process id, in any version unless `version` names one.
+     * @param version Only instances of this version of `processId`. Ignored without `processId`.
+     * @param draft `true` keeps only test runs (see `StartBpmnTestInstance`), `false`
+     * leaves them out. Omit for both.
+     *
+     * @param cursor The `nextCursor` of the page before, absent for the first page.
+     * @param limit Most instances per page, 20 by default and 100 at most.
      * @returns BpmnInstancePaginatedResponse OK
      * @throws ApiError
      */
     public listBpmnInstances(
         projectId: string,
-        definitionId?: string,
-        status?: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELED' | 'TERMINATED' | 'TIMED_OUT',
+        status?: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELED' | 'TERMINATED',
         hasIncident?: boolean,
         suspended?: boolean,
         createdAfter?: string,
         businessId?: string,
         processId?: string,
-        page?: number,
-        pageSize?: number,
+        version?: number,
+        draft?: boolean,
+        cursor?: string,
+        limit?: number,
     ): CancelablePromise<BpmnInstancePaginatedResponse> {
         return this.httpRequest.request({
             method: 'GET',
@@ -706,26 +654,29 @@ export class DefaultService {
                 'projectID': projectId,
             },
             query: {
-                'definitionID': definitionId,
                 'status': status,
                 'hasIncident': hasIncident,
                 'suspended': suspended,
                 'createdAfter': createdAfter,
                 'businessId': businessId,
                 'processId': processId,
-                'page': page,
-                'pageSize': pageSize,
+                'version': version,
+                'draft': draft,
+                'cursor': cursor,
+                'limit': limit,
             },
         });
     }
     /**
      * Start a BPMN process instance
-     * Starts a new instance of a deployed BPMN process. The returned
-     * `workflowID` is the stable execution identifier - use it to fetch
-     * state, send signals/messages, complete user tasks, etc.
+     * Starts a new instance of a deployed BPMN process, the latest version
+     * unless the request names one. The returned `instanceID` addresses the
+     * instance - use it to fetch state, send signals/messages, complete user
+     * tasks, etc.
      *
-     * A process from a resource that is not deployed yet is refused with a
-     * 400. Drafts only start test instances, see `StartBpmnTestInstance`.
+     * A process with no deployed version, or without the requested one,
+     * answers 404, also when it exists in a resource that is not deployed yet.
+     * Drafts only start test instances, see `StartBpmnTestInstance`.
      *
      * @param projectId
      * @param requestBody
@@ -737,9 +688,9 @@ export class DefaultService {
         requestBody: StartBpmnInstanceRequest,
     ): CancelablePromise<{
         /**
-         * Stable execution identifier of the new instance.
+         * Identifier of the new instance.
          */
-        workflowID?: string;
+        instanceID?: string;
     }> {
         return this.httpRequest.request({
             method: 'POST',
@@ -759,31 +710,28 @@ export class DefaultService {
     }
     /**
      * Get BPMN instance state
-     * Returns the full runtime state of a process instance - current variables,
-     * activity history, active scopes, and any unresolved incidents. Use this
-     * to render dashboards or to drive operational decisions on a single
-     * instance.
+     * Returns the runtime state of a process instance - current variables,
+     * active scopes, and any unresolved incidents. Its history is paged
+     * separately, see `GetBpmnInstanceHistory`.
      *
      * @param projectId
-     * @param workflowId
+     * @param instanceId
      * @returns BpmnInstanceState OK
      * @throws ApiError
      */
     public getBpmnInstance(
         projectId: string,
-        workflowId: string,
+        instanceId: string,
     ): CancelablePromise<BpmnInstanceState> {
         return this.httpRequest.request({
             method: 'GET',
-            url: '/projects/{projectID}/bpmn/instances/{workflowID}',
+            url: '/projects/{projectID}/bpmn/instances/{instanceID}',
             path: {
                 'projectID': projectId,
-                'workflowID': workflowId,
+                'instanceID': instanceId,
             },
             errors: {
-                503: `The instance is running but did not answer the state query, typically
-                while Temporal retries a workflow task that timed out. Try again shortly.
-                `,
+                404: `Not Found`,
             },
         });
     }
@@ -793,47 +741,48 @@ export class DefaultService {
      * child instances. Cancellation is best-effort - handlers in flight may
      * still complete before the cancel propagates. Cancelled instances move
      * to status `CANCELED` and stop consuming further work.
+     * The cancel is recorded in the instance's history as a
+     * `CancelInstanceEvent` naming who cancelled it.
      *
      * @param projectId
-     * @param workflowId
+     * @param instanceId
      * @returns void
      * @throws ApiError
      */
     public cancelBpmnInstance(
         projectId: string,
-        workflowId: string,
+        instanceId: string,
     ): CancelablePromise<void> {
         return this.httpRequest.request({
             method: 'DELETE',
-            url: '/projects/{projectID}/bpmn/instances/{workflowID}',
+            url: '/projects/{projectID}/bpmn/instances/{instanceID}',
             path: {
                 'projectID': projectId,
-                'workflowID': workflowId,
+                'instanceID': instanceId,
             },
             errors: {
                 400: `The instance is a call-activity child of a running instance. Cancel the root instance instead.`,
-                404: `No instance has this workflow ID.`,
+                404: `No instance has this ID.`,
             },
         });
     }
     /**
      * List external jobs
      * Returns paginated external jobs in the project, with optional filters
-     * by `taskType`, `status`, and originating instance. Use this to drive
-     * a dashboard or to inspect a specific job's history. For pulling
-     * pending work as a job worker, use `Poll` instead.
+     * by `taskType`, `status`, and originating instance. The list holds the
+     * pending jobs and the finished jobs of running instances. An instance's
+     * jobs leave the list when it ends, and its history keeps each job's task
+     * type, retries left and worker. For pulling pending work as a job
+     * worker, use `Poll` instead.
      *
      * @param projectId
      * @param taskType Filter jobs by task type
      * @param status Filter jobs by status
-     * @param workflowId Filter jobs by workflow ID
+     * @param instanceId Only this instance's jobs. A test run's jobs list only by its instance.
      * @param businessId Prefix match on the caller-supplied correlation key.
-     * @param createdAfter Only return jobs created at or after this timestamp. Strongly
-     * recommended for monitoring views - completed-job records accumulate
-     * indefinitely, and unfiltered queries grow linearly with that history.
-     *
-     * @param page
-     * @param pageSize
+     * @param createdAfter Only return jobs created at or after this timestamp.
+     * @param cursor The `nextCursor` of the page before, absent for the first page.
+     * @param limit Most jobs per page, 20 by default and 100 at most.
      * @returns BpmnExternalJobPaginatedResponse OK
      * @throws ApiError
      */
@@ -841,11 +790,11 @@ export class DefaultService {
         projectId: string,
         taskType?: string,
         status?: 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELED',
-        workflowId?: string,
+        instanceId?: string,
         businessId?: string,
         createdAfter?: string,
-        page?: number,
-        pageSize?: number,
+        cursor?: string,
+        limit?: number,
     ): CancelablePromise<BpmnExternalJobPaginatedResponse> {
         return this.httpRequest.request({
             method: 'GET',
@@ -856,11 +805,11 @@ export class DefaultService {
             query: {
                 'taskType': taskType,
                 'status': status,
-                'workflowID': workflowId,
+                'instanceID': instanceId,
                 'businessId': businessId,
                 'createdAfter': createdAfter,
-                'page': page,
-                'pageSize': pageSize,
+                'cursor': cursor,
+                'limit': limit,
             },
         });
     }
@@ -870,7 +819,7 @@ export class DefaultService {
      * jobs (up to `maxJobs`) as soon as any are available, or `204 No Content`
      * when the timeout elapses with no work. Each returned job is locked to
      * the caller until `lockDuration` passes without a `Heartbeat`, and for at
-     * most the server's `BPMN_JOB_MAX_HOLD` (30m by default) in total. Finish
+     * most the server's `ENGINE_JOB_MAX_HOLD` (30m by default) in total. Finish
      * with `Complete` or `ThrowError`. A lock that runs out costs the job a
      * retry, and with no retries left it raises an incident.
      *
@@ -899,7 +848,7 @@ export class DefaultService {
     /**
      * Extend the lock on an acquired job
      * Keeps the caller's lock on a job it acquired via `Poll` for another
-     * `lockDuration`, up to `BPMN_JOB_MAX_HOLD` after the job was handed out.
+     * `lockDuration`, up to `ENGINE_JOB_MAX_HOLD` after the job was handed out.
      * SDK workers send it at half of the lock the poll granted
      * (`lockExpiresAt`) while a handler runs.
      * Other workers cannot claim the job while the lock holds.
@@ -932,7 +881,7 @@ export class DefaultService {
             mediaType: 'application/json',
             errors: {
                 400: `An empty \`clientID\`, or a \`lockDuration\` that is not a Go duration.`,
-                404: `No job has this execution key.`,
+                404: `No job has this execution key, or its instance has ended. Stop working on it.`,
                 409: `This worker no longer holds the job. Its lock ran out, another
                 worker holds it, or the job has finished. Stop working on it. The
                 message says when the job was cancelled.
@@ -945,7 +894,9 @@ export class DefaultService {
      * Finalizes an acquired external job successfully. The supplied
      * `variables` are merged into the originating instance's scope and the
      * process resumes after the service task. Idempotent on the executionKey:
-     * a second call with the same key after success is a no-op.
+     * a second call with the same key after success is a no-op. Once the
+     * instance has ended, any report on its jobs answers 200 and changes
+     * nothing.
      *
      * @param projectId
      * @param executionKey
@@ -958,15 +909,17 @@ export class DefaultService {
         executionKey: string,
         requestBody: {
             /**
-             * Workflow ID returned by the poll response.
+             * Instance ID returned by the poll response.
              */
-            workflowID: string;
+            instanceID: string;
             /**
              * Optional worker identity (the same `clientID` used to poll).
              * When supplied, a worker that no longer holds the job's lock
-             * gets 409 and its result is discarded. Completing a job this
-             * worker already completed answers 200 again. Omit for the
-             * legacy unchecked behavior.
+             * gets 409 and its result is discarded. Repeating the report
+             * this worker last made on the job answers 200 again and changes
+             * nothing. Without it, the completion applies to an open job no
+             * worker holds a live lock on, as a completion from the console
+             * does.
              *
              */
             clientID?: string;
@@ -983,10 +936,12 @@ export class DefaultService {
             body: requestBody,
             mediaType: 'application/json',
             errors: {
-                404: `No job has this execution key.`,
-                409: `This worker no longer holds the job, so the result was discarded.
-                Its lock ran out, another worker holds or completed it, or the job
-                failed or was cancelled. The message says when it was cancelled.
+                404: `The instance is running and has no job with this execution key.`,
+                409: `The result was discarded. This worker no longer holds the job: its
+                lock ran out, another worker holds or completed it, or the job
+                failed or was cancelled. Without a \`clientID\`, a worker holds a live
+                lock on the job, named in the message, or the job already ended. The
+                message says when it was cancelled.
                 `,
             },
         });

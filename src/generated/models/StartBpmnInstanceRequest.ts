@@ -7,9 +7,13 @@
  */
 export type StartBpmnInstanceRequest = {
     /**
-     * ID of a deployed `BpmnProcessDefinition` to start.
+     * BPMN process ID of a deployed process to start.
      */
-    processDefinitionID: string;
+    processID: string;
+    /**
+     * Deployed version to start. Omit for the latest version.
+     */
+    version?: number;
     /**
      * Initial process variables. Available to FEEL expressions and service tasks from the first activity onward.
      */

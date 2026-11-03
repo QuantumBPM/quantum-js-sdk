@@ -2,13 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CursorPage } from './CursorPage';
 import type { ExternalJob } from './ExternalJob';
-import type { PaginationMetadata } from './PaginationMetadata';
 /**
  * Page of external jobs.
  */
 export type BpmnExternalJobPaginatedResponse = {
     data: Array<ExternalJob>;
-    pagination: PaginationMetadata;
+    pagination: CursorPage;
 };
 

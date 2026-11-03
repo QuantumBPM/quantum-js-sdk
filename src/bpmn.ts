@@ -1,8 +1,11 @@
 import { RawClient } from './generated/RawClient';
+import { BpmnActivityState } from './generated/models/BpmnActivityState';
+import { BpmnHistoryPage } from './generated/models/BpmnHistoryPage';
 import { BpmnInstancePaginatedResponse } from './generated/models/BpmnInstancePaginatedResponse';
 import { BpmnInstanceChildrenResponse } from './generated/models/BpmnInstanceChildrenResponse';
 import { BpmnInstanceState } from './generated/models/BpmnInstanceState';
 import { BpmnProcessSummaryPaginatedResponse } from './generated/models/BpmnProcessSummaryPaginatedResponse';
+import { BpmnProcessVersion } from './generated/models/BpmnProcessVersion';
 import { BpmnProcessVersionPaginatedResponse } from './generated/models/BpmnProcessVersionPaginatedResponse';
 import { BpmnResourceDetail } from './generated/models/BpmnResourceDetail';
 import { BpmnResourcePaginatedResponse } from './generated/models/BpmnResourcePaginatedResponse';
@@ -17,10 +20,13 @@ import { Vars } from './variables';
 
 /** Re-exported entity types so callers don't depend on the generated package. */
 export type {
+    BpmnActivityState,
+    BpmnHistoryPage,
     BpmnInstancePaginatedResponse,
     BpmnInstanceChildrenResponse,
     BpmnInstanceState,
     BpmnProcessSummaryPaginatedResponse,
+    BpmnProcessVersion,
     BpmnProcessVersionPaginatedResponse,
     BpmnResourceDetail,
     BpmnResourcePaginatedResponse,
@@ -37,11 +43,20 @@ export interface PageOptions {
     pageSize?: number;
 }
 
-export interface InstanceListOptions extends PageOptions {
-    definitionId?: string;
-    /** Instances of every version of this process id. */
+/** Paging of a list the API pages by cursor. */
+export interface CursorOptions {
+    /** The `pagination.nextCursor` of the page before, omitted for the first page. */
+    cursor?: string;
+    /** Most rows per page, 20 by default and 100 at most. */
+    limit?: number;
+}
+
+export interface InstanceListOptions extends CursorOptions {
+    /** Instances of every version of this process id, unless `version` names one. */
     processId?: string;
-    status?: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELED' | 'TERMINATED' | 'TIMED_OUT';
+    /** Instances of this version of `processId`. Ignored without `processId`. */
+    version?: number;
+    status?: 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELED' | 'TERMINATED';
     /**
      * Filter by incident presence. `true` shows only instances that
      * need operator attention; `false` excludes them; omit for all.
@@ -62,10 +77,26 @@ export interface InstanceListOptions extends PageOptions {
      * at startInstance time.
      */
     businessId?: string;
+    /** `true` keeps only test runs, `false` leaves them out. Omit for both. */
+    draft?: boolean;
 }
 
-export interface UserTaskListOptions extends PageOptions {
-    workflowId?: string;
+/** The due date range and order of a user task list. */
+export interface UserTaskScheduleOptions extends CursorOptions {
+    /** Tasks due at or after this time (RFC 3339). */
+    dueAfter?: string;
+    /** Tasks due before this time (RFC 3339). With `status: 'CREATED'` and now, the overdue tasks. */
+    dueBefore?: string;
+    /**
+     * `created` lists the newest first, the default. `dueDate` lists the
+     * soonest due first, `priority` the highest priority first. A cursor
+     * continues only a list of the same sort.
+     */
+    sort?: 'created' | 'dueDate' | 'priority';
+}
+
+export interface UserTaskListOptions extends UserTaskScheduleOptions {
+    instanceId?: string;
     status?: 'CREATED' | 'COMPLETED' | 'CANCELED' | 'FAILED';
     assignee?: string;
     candidateUser?: string;
@@ -84,6 +115,18 @@ export interface StartInstanceOptions {
      * DMN execution emitted by the resulting process.
      */
     businessId?: string;
+    /** Deployed version to start, the latest when omitted. startTestInstance ignores it. */
+    version?: number;
+}
+
+/** Which window of an instance's history to read. Omit both seqs for the newest entries. */
+export interface HistoryOptions {
+    /** Read the entries from this seq on, to follow a running instance. Takes precedence over `beforeSeq`. */
+    fromSeq?: number;
+    /** Read the newest entries before this seq, to walk back. */
+    beforeSeq?: number;
+    /** Most entries per page. */
+    limit?: number;
 }
 
 export interface ProcessListOptions extends PageOptions {
@@ -142,9 +185,9 @@ export class BpmnClient {
     }
 
     /**
-     * Promote a draft to a deployed process definition. After this returns,
-     * the resource's `processes` field is populated and StartInstance can
-     * reference the resulting process definition IDs.
+     * Deploy a draft. After this returns, the resource's `processes` field
+     * lists the process versions it deployed, and startInstance can start
+     * them by process ID.
      */
     async deployResource(resourceId: string): Promise<void> {
         await this.raw.bpmn.deployBpmnResource(this.projectId, resourceId);
@@ -157,10 +200,10 @@ export class BpmnClient {
             variables: vars.toWireMap() as any,
             businessId: opts.businessId,
         });
-        if (!resp.workflowID) {
-            throw new Error('bpmn: startTestInstance returned no workflowID');
+        if (!resp.instanceID) {
+            throw new Error('bpmn: startTestInstance returned no instanceID');
         }
-        return resp.workflowID;
+        return resp.instanceID;
     }
 
     /** Lint a BPMN XML document without storing or deploying it. */
@@ -185,69 +228,92 @@ export class BpmnClient {
 
     // --- Instances ----------------------------------------------------------
 
-    /** Launch a new instance. Returns the workflowID. */
-    async startInstance(processDefinitionId: string, vars: Vars, opts: StartInstanceOptions = {}): Promise<string> {
+    /**
+     * Launch a new instance of a deployed process, its latest version unless
+     * `opts.version` names one. Returns the instance ID.
+     */
+    async startInstance(processId: string, vars: Vars, opts: StartInstanceOptions = {}): Promise<string> {
         const resp = await this.raw.default.startBpmnInstance(this.projectId, {
-            processDefinitionID: processDefinitionId,
+            processID: processId,
+            version: opts.version,
             variables: vars.toWireMap() as any,
             businessId: opts.businessId,
         });
-        if (!resp.workflowID) {
-            throw new Error('bpmn: startInstance returned no workflowID');
+        if (!resp.instanceID) {
+            throw new Error('bpmn: startInstance returned no instanceID');
         }
-        return resp.workflowID;
+        return resp.instanceID;
     }
 
     /** Full runtime state of an instance. */
-    async getInstance(workflowId: string): Promise<BpmnInstanceState> {
-        return this.raw.default.getBpmnInstance(this.projectId, workflowId);
+    async getInstance(instanceId: string): Promise<BpmnInstanceState> {
+        return this.raw.default.getBpmnInstance(this.projectId, instanceId);
     }
 
     /** Terminate a running instance. */
-    async cancelInstance(workflowId: string): Promise<void> {
-        await this.raw.default.cancelBpmnInstance(this.projectId, workflowId);
+    async cancelInstance(instanceId: string): Promise<void> {
+        await this.raw.default.cancelBpmnInstance(this.projectId, instanceId);
     }
 
-    /** Page of instances in the project. */
+    /**
+     * Page of instances in the project, newest first. Pass the page's
+     * `pagination.nextCursor` as `cursor` for the next one. It is absent on
+     * the last page.
+     */
     async listInstances(opts: InstanceListOptions = {}): Promise<BpmnInstancePaginatedResponse> {
-        // Generated signature order: (projectId, definitionId, status,
-        // hasIncident, suspended, createdAfter, businessId, processId, page,
-        // pageSize). Positional call - keep the order in sync with the regenerated client.
+        // Generated signature order: (projectId, status, hasIncident,
+        // suspended, createdAfter, businessId, processId, version, draft,
+        // cursor, limit). Positional call - keep the order in sync with the regenerated client.
         return this.raw.default.listBpmnInstances(
             this.projectId,
-            opts.definitionId,
             opts.status,
             opts.hasIncident,
             opts.suspended,
             opts.createdAfter,
             opts.businessId,
             opts.processId,
-            opts.page,
-            opts.pageSize,
+            opts.version,
+            opts.draft,
+            opts.cursor,
+            opts.limit,
         );
     }
 
     /** Children spawned via CallActivity. */
-    async getInstanceChildren(workflowId: string): Promise<BpmnInstanceChildrenResponse> {
-        return this.raw.bpmn.getBpmnInstanceChildren(this.projectId, workflowId);
+    async getInstanceChildren(instanceId: string): Promise<BpmnInstanceChildrenResponse> {
+        return this.raw.bpmn.getBpmnInstanceChildren(this.projectId, instanceId);
+    }
+
+    /**
+     * Page of an instance's history, oldest first, for a running or an ended
+     * instance. Page entries leave out `inputs` and `outputs`, which
+     * getInstanceHistoryEntry() reads.
+     */
+    async getInstanceHistory(instanceId: string, opts: HistoryOptions = {}): Promise<BpmnHistoryPage> {
+        return this.raw.bpmn.getBpmnInstanceHistory(this.projectId, instanceId, opts.fromSeq, opts.beforeSeq, opts.limit);
+    }
+
+    /** One history entry with its inputs and outputs. */
+    async getInstanceHistoryEntry(instanceId: string, seq: number): Promise<BpmnActivityState> {
+        return this.raw.bpmn.getBpmnInstanceHistoryEntry(this.projectId, instanceId, seq);
     }
 
     /** Current variables of an instance. */
-    async getInstanceVariables(workflowId: string): Promise<Vars> {
-        const resp = await this.raw.bpmn.getBpmnInstanceVariables(this.projectId, workflowId);
+    async getInstanceVariables(instanceId: string): Promise<Vars> {
+        const resp = await this.raw.bpmn.getBpmnInstanceVariables(this.projectId, instanceId);
         return Vars.fromWireMap(resp.variables);
     }
 
     /** Merge variables into the instance scope. */
-    async updateInstanceVariables(workflowId: string, vars: Vars): Promise<void> {
-        await this.raw.bpmn.updateBpmnInstanceVariables(this.projectId, workflowId, {
+    async updateInstanceVariables(instanceId: string, vars: Vars): Promise<void> {
+        await this.raw.bpmn.updateBpmnInstanceVariables(this.projectId, instanceId, {
             variables: (vars.toWireMap() ?? {}) as any,
         });
     }
 
     /** Resolve an incident, optionally merging supplementary variables. */
-    async resolveIncident(workflowId: string, incidentId: string, vars: Vars = new Vars()): Promise<void> {
-        await this.raw.bpmn.resolveBpmnIncident(this.projectId, workflowId, incidentId, {
+    async resolveIncident(instanceId: string, incidentId: string, vars: Vars = new Vars()): Promise<void> {
+        await this.raw.bpmn.resolveBpmnIncident(this.projectId, instanceId, incidentId, {
             variables: vars.toWireMap() as any,
         });
     }
@@ -273,23 +339,37 @@ export class BpmnClient {
 
     // --- User tasks ---------------------------------------------------------
 
+    /**
+     * Page of user tasks in the project. Pass the page's
+     * `pagination.nextCursor` as `cursor` for the next one.
+     */
     async listUserTasks(opts: UserTaskListOptions = {}): Promise<BpmnUserTaskPaginatedResponse> {
         return this.raw.bpmn.listBpmnUserTasks(
             this.projectId,
-            opts.workflowId,
+            opts.instanceId,
             opts.status,
             opts.assignee,
             opts.candidateUser,
             opts.candidateGroup,
             opts.businessId,
-            opts.page,
-            opts.pageSize,
+            opts.dueAfter,
+            opts.dueBefore,
+            opts.sort,
+            opts.cursor,
+            opts.limit,
         );
     }
 
-    /** User tasks the caller may claim or has already claimed. */
-    async listUserTasksForCaller(opts: PageOptions = {}): Promise<BpmnUserTaskPaginatedResponse> {
-        return this.raw.bpmn.listBpmnUserTasksForCaller(this.projectId, opts.page, opts.pageSize);
+    /** Page of the user tasks the caller may claim or has already claimed. */
+    async listUserTasksForCaller(opts: UserTaskScheduleOptions = {}): Promise<BpmnUserTaskPaginatedResponse> {
+        return this.raw.bpmn.listBpmnUserTasksForCaller(
+            this.projectId,
+            opts.dueAfter,
+            opts.dueBefore,
+            opts.sort,
+            opts.cursor,
+            opts.limit,
+        );
     }
 
     async getUserTask(executionKey: string): Promise<UserTask> {
@@ -333,5 +413,10 @@ export class BpmnClient {
             opts.pageSize,
             opts.createdAfter,
         );
+    }
+
+    /** One deployed version of a process id with its instance counts and suspension state. */
+    async getProcessVersion(processId: string, version: number, opts: { createdAfter?: string } = {}): Promise<BpmnProcessVersion> {
+        return this.raw.bpmn.getBpmnProcessVersion(this.projectId, processId, version, opts.createdAfter);
     }
 }

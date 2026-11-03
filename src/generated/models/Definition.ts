@@ -3,11 +3,11 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * A stored DMN definition. Each call to CreateDefinition produces a new version of a `definitionsID`.
+ * A saved DMN definition, a draft until it is deployed.
  */
 export type Definition = {
     /**
-     * Platform identifier for this specific definition version.
+     * Platform identifier of this saved definition.
      */
     id: string;
     /**
@@ -15,7 +15,7 @@ export type Definition = {
      */
     name: string;
     /**
-     * Stable identifier from the DMN XML's outer `<definitions id="…">` attribute. Shared across versions.
+     * Stable identifier from the DMN XML's outer `<definitions id="…">` attribute. Shared across the definitions saved for one model.
      */
     definitionsID: string;
     /**
@@ -23,19 +23,27 @@ export type Definition = {
      */
     xml: string;
     /**
-     * Auto-incremented version number, starting at 1 for the first upload of a `definitionsID`.
+     * True once the definition is deployed, which makes it read-only and its decisions evaluable.
      */
-    version: number;
+    isDeployed: boolean;
     /**
-     * User who uploaded this version.
+     * The version its deploy gave it, counted per `definitionsID`. Absent on a draft.
+     */
+    version?: number;
+    /**
+     * Timestamp of the deploy. Absent on a draft.
+     */
+    deployedAt?: string;
+    /**
+     * User who saved this definition.
      */
     createdBy?: string;
     /**
-     * Timestamp when this version was uploaded.
+     * Timestamp of the last save.
      */
     createdAt: string;
     /**
-     * Total number of stored versions under this `definitionsID`. Populated by the latest-listing endpoint; absent on single-version reads.
+     * How many definitions are saved under this `definitionsID`. Populated by the latest-listing endpoint and absent on single reads.
      */
     versionCount?: number;
 };

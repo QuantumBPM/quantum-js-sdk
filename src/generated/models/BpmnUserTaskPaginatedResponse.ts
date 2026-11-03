@@ -2,13 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { PaginationMetadata } from './PaginationMetadata';
+import type { CursorPage } from './CursorPage';
 import type { UserTask } from './UserTask';
 /**
  * Page of user tasks.
  */
 export type BpmnUserTaskPaginatedResponse = {
     data: Array<UserTask>;
-    pagination: PaginationMetadata;
+    pagination: CursorPage;
 };
 

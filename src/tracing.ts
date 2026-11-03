@@ -29,7 +29,7 @@ export function startJobSpan(raw: ExternalJob, taskType: string): { ctx: Context
     const attributes: Attributes = {
         'bpmn.task_type': taskType,
         'bpmn.node_id': raw.nodeID,
-        'bpmn.process_instance_id': raw.workflowID,
+        'bpmn.process_instance_id': raw.instanceID,
         'bpmn.execution_key': raw.executionKey,
     };
     if (raw.businessId) {

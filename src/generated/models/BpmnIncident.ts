@@ -41,21 +41,19 @@ export type BpmnIncident = {
     /**
      * Category of the error. Values:
      * * `BpmnError` - A `bpmn:error` thrown by the process or an external job worker.
-     * * `EscalationError` - A `bpmn:escalation` raised by the process.
      * * `CompensationError` - Failure during compensation handler execution.
      * * `FeelError` - A FEEL expression failed to evaluate.
-     * * `NoHandler` - A thrown error/escalation has no matching catch event.
      * * `GatewayNoMatch` - An exclusive gateway evaluated all conditions to false with no default flow.
      * * `TimerResolution` - A timer expression could not be parsed or resolved.
      * * `LinkNotFound` - A link throw event has no matching link catch.
      * * `MigrationError` - A process instance migration could not be applied.
-     * * `SubscriptionError` - A message/signal listener's registry row could not be written; the listener is dead until resolved.
-     * * `RotationLimitError` - The instance reached its ContinueAsNew rotation cap.
-     * * `SnapshotSizeExceeded` - A ContinueAsNew snapshot exceeded the configured size cap.
      * * `CallActivityCanceled` - A call-activity child terminated as Canceled out-of-band.
      * * `ExternalRowRefreshError` - A migration could not rewrite a parked wait's external row (job, user task or subscription) against the target definition. Resolving re-runs the refresh.
      * * `JobLockLost` - An external job's worker lock ran out, by missed heartbeats or the maximum hold, with no retries left.
      * * `DecisionNotFound` - A business rule task called a decision, or a pinned version of one, that is not deployed.
+     * * `DecisionEvaluationError` - The decision a business rule task called failed while it was evaluated, such as a FEEL error or a violated hit policy. The failed evaluation is recorded.
+     * * `ProcessNotFound` - A call activity called a process, or a pinned version of one, that is not deployed.
+     * * `ProcessSuspended` - A call activity called a suspended process version.
      * * `Unknown` - Internal error not classified above.
      *
      */
@@ -65,49 +63,45 @@ export type BpmnIncident = {
      */
     variables?: Record<string, any>;
     /**
-     * Unix epoch milliseconds when the incident was recorded.
+     * When the incident was raised.
      */
-    timestamp?: number;
+    raisedAt?: string;
 };
 export namespace BpmnIncident {
     /**
      * Category of the error. Values:
      * * `BpmnError` - A `bpmn:error` thrown by the process or an external job worker.
-     * * `EscalationError` - A `bpmn:escalation` raised by the process.
      * * `CompensationError` - Failure during compensation handler execution.
      * * `FeelError` - A FEEL expression failed to evaluate.
-     * * `NoHandler` - A thrown error/escalation has no matching catch event.
      * * `GatewayNoMatch` - An exclusive gateway evaluated all conditions to false with no default flow.
      * * `TimerResolution` - A timer expression could not be parsed or resolved.
      * * `LinkNotFound` - A link throw event has no matching link catch.
      * * `MigrationError` - A process instance migration could not be applied.
-     * * `SubscriptionError` - A message/signal listener's registry row could not be written; the listener is dead until resolved.
-     * * `RotationLimitError` - The instance reached its ContinueAsNew rotation cap.
-     * * `SnapshotSizeExceeded` - A ContinueAsNew snapshot exceeded the configured size cap.
      * * `CallActivityCanceled` - A call-activity child terminated as Canceled out-of-band.
      * * `ExternalRowRefreshError` - A migration could not rewrite a parked wait's external row (job, user task or subscription) against the target definition. Resolving re-runs the refresh.
      * * `JobLockLost` - An external job's worker lock ran out, by missed heartbeats or the maximum hold, with no retries left.
      * * `DecisionNotFound` - A business rule task called a decision, or a pinned version of one, that is not deployed.
+     * * `DecisionEvaluationError` - The decision a business rule task called failed while it was evaluated, such as a FEEL error or a violated hit policy. The failed evaluation is recorded.
+     * * `ProcessNotFound` - A call activity called a process, or a pinned version of one, that is not deployed.
+     * * `ProcessSuspended` - A call activity called a suspended process version.
      * * `Unknown` - Internal error not classified above.
      *
      */
     export enum errorType {
         BPMN_ERROR = 'BpmnError',
-        ESCALATION_ERROR = 'EscalationError',
         COMPENSATION_ERROR = 'CompensationError',
         FEEL_ERROR = 'FeelError',
-        NO_HANDLER = 'NoHandler',
         GATEWAY_NO_MATCH = 'GatewayNoMatch',
         TIMER_RESOLUTION = 'TimerResolution',
         LINK_NOT_FOUND = 'LinkNotFound',
         MIGRATION_ERROR = 'MigrationError',
-        SUBSCRIPTION_ERROR = 'SubscriptionError',
-        ROTATION_LIMIT_ERROR = 'RotationLimitError',
-        SNAPSHOT_SIZE_EXCEEDED = 'SnapshotSizeExceeded',
         CALL_ACTIVITY_CANCELED = 'CallActivityCanceled',
         EXTERNAL_ROW_REFRESH_ERROR = 'ExternalRowRefreshError',
         JOB_LOCK_LOST = 'JobLockLost',
         DECISION_NOT_FOUND = 'DecisionNotFound',
+        DECISION_EVALUATION_ERROR = 'DecisionEvaluationError',
+        PROCESS_NOT_FOUND = 'ProcessNotFound',
+        PROCESS_SUSPENDED = 'ProcessSuspended',
         UNKNOWN = 'Unknown',
     }
 }

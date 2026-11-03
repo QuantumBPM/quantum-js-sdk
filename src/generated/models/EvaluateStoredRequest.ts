@@ -5,20 +5,19 @@
 import type { ErrorMode } from './ErrorMode';
 import type { FeelContext } from './FeelContext';
 /**
- * Payload for evaluating a stored DMN definition.
+ * Payload for evaluating a deployed DMN definition.
  */
 export type EvaluateStoredRequest = {
     /**
-     * Specific definition version to evaluate when evaluating by definitions id. Defaults to the
-     * latest version. The `version` query parameter does the same, and a request giving both with
-     * different values is rejected. Evaluating by definition UUID ignores it, as the UUID names one version.
+     * Deployed version to evaluate, the latest when omitted. The `version` query parameter does
+     * the same, and a request giving both with different values is rejected.
      *
      */
     version?: number;
     context: FeelContext;
     errorMode?: ErrorMode;
     /**
-     * Names of decision services to evaluate. If empty, no decision services are evaluated.
+     * Names of decision services to evaluate. When given, `decisions` is ignored.
      */
     decisionServices?: Array<string>;
     /**
@@ -26,7 +25,7 @@ export type EvaluateStoredRequest = {
      */
     decisions?: Array<string>;
     /**
-     * Optional caller-supplied correlation key persisted with the resulting execution row for cross-system tracing.
+     * Optional caller-supplied correlation key recorded with the evaluation for cross-system tracing.
      */
     businessId?: string;
 };

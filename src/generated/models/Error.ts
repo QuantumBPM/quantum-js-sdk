@@ -10,10 +10,10 @@ export type Error = {
      * Machine-readable error category. Values:
      * * `BAD_REQUEST` - request is malformed or fails validation.
      * * `UNAUTHORIZED` - request lacks or has an invalid authentication token.
-     * * `FORBIDDEN` - caller is authenticated but lacks permission, or has hit a quota.
+     * * `FORBIDDEN` - caller is authenticated but lacks permission.
      * * `NOT_FOUND` - the addressed resource does not exist.
      * * `CONFLICT` - the request collides with the resource's current state, such as reporting on a job this worker no longer holds.
-     * * `UNAVAILABLE` - the resource cannot answer right now, such as a running instance whose workflow task is being retried. Try again shortly.
+     * * `UNAVAILABLE` - the resource cannot answer right now, such as while the engine's database is unreachable. Try again shortly.
      * * `INTERNAL_ERROR` - unexpected server-side failure.
      *
      */
@@ -32,10 +32,10 @@ export namespace Error {
      * Machine-readable error category. Values:
      * * `BAD_REQUEST` - request is malformed or fails validation.
      * * `UNAUTHORIZED` - request lacks or has an invalid authentication token.
-     * * `FORBIDDEN` - caller is authenticated but lacks permission, or has hit a quota.
+     * * `FORBIDDEN` - caller is authenticated but lacks permission.
      * * `NOT_FOUND` - the addressed resource does not exist.
      * * `CONFLICT` - the request collides with the resource's current state, such as reporting on a job this worker no longer holds.
-     * * `UNAVAILABLE` - the resource cannot answer right now, such as a running instance whose workflow task is being retried. Try again shortly.
+     * * `UNAVAILABLE` - the resource cannot answer right now, such as while the engine's database is unreachable. Try again shortly.
      * * `INTERNAL_ERROR` - unexpected server-side failure.
      *
      */

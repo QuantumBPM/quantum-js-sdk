@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Payload for creating a new DMN definition version.
+ * Payload for saving a new draft DMN definition.
  */
 export type CreateDefinitionRequest = {
     /**
@@ -14,9 +14,5 @@ export type CreateDefinitionRequest = {
      * DMN XML body.
      */
     xml: string;
-    /**
-     * Optional explicit version number. If omitted, the server assigns one.
-     */
-    version?: number;
 };
 

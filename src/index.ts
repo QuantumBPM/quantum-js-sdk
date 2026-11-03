@@ -3,17 +3,17 @@
  *
  * @example
  * ```typescript
- * import { QuantumBPM, Vars, ZitadelTokenProvider } from '@quantumbpm/sdk';
+ * import { ClientCredentialsTokenProvider, QuantumBPM, Vars } from '@quantumbpm/sdk';
  *
- * const provider = new ZitadelTokenProvider(keyPath, issuer, zitadelProjectId);
+ * const provider = new ClientCredentialsTokenProvider({ tokenUrl, clientId, clientSecret });
  * const client = new QuantumBPM({
- *   baseUrl: 'https://api.quantumbpm.com',
+ *   baseUrl: 'https://quantumbpm.example.com',
  *   projectId: '00000000-0000-0000-0000-000000000000',
  *   tokenProvider: provider,
  * });
  *
  * const result = await client.dmn.evaluate('loan-eligibility', new Vars().set('amount', 1000));
- * const wfId = await client.bpmn.startInstance(processDefId, new Vars());
+ * const instanceId = await client.bpmn.startInstance('order-flow', new Vars());
  *
  * const ac = new AbortController();
  * const worker = client.newWorker({ clientId: 'billing-svc' });
@@ -35,7 +35,7 @@ import { RawClient } from './generated/RawClient';
 import { Worker, WorkerConfig } from './workers';
 
 export interface QuantumBPMConfig {
-    /** API base URL (e.g. https://api.quantumbpm.com). */
+    /** API base URL (e.g. https://quantumbpm.example.com). */
     baseUrl: string;
     /** Workspace the client is scoped to. All calls operate on this project. */
     projectId: string;
@@ -83,7 +83,8 @@ export { Vars } from './variables';
 export {
     TokenProvider,
     StaticTokenProvider,
-    ZitadelTokenProvider,
+    ClientCredentialsTokenProvider,
+    ClientCredentialsOptions,
     createAuthenticatedClient,
 } from './auth';
 export {
@@ -96,17 +97,23 @@ export {
 export {
     BpmnClient,
     PageOptions,
+    CursorOptions,
     InstanceListOptions,
     UserTaskListOptions,
+    UserTaskScheduleOptions,
+    HistoryOptions,
     ProcessListOptions,
     MessageOptions,
     SignalOptions,
 } from './bpmn';
 export type {
+    BpmnActivityState,
+    BpmnHistoryPage,
     BpmnInstancePaginatedResponse,
     BpmnInstanceChildrenResponse,
     BpmnInstanceState,
     BpmnProcessSummaryPaginatedResponse,
+    BpmnProcessVersion,
     BpmnProcessVersionPaginatedResponse,
     BpmnResourceDetail,
     BpmnResourcePaginatedResponse,

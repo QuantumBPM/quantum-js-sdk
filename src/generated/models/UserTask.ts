@@ -3,13 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * A human-handled work item produced by a BPMN user task or manual task.
+ * A human-handled work item produced by a BPMN user task.
  */
 export type UserTask = {
-    /**
-     * Unique identifier of this user task record.
-     */
-    id: string;
     /**
      * Stable key for the activity execution. Used as the path parameter when completing or failing the task.
      */
@@ -17,19 +13,15 @@ export type UserTask = {
     /**
      * Identifier of the instance that produced the task.
      */
-    workflowID: string;
+    instanceID: string;
     /**
      * Identifier of the parent instance (set when the producing instance was started by a CallActivity).
      */
-    parentWorkflowID?: string;
+    parentInstanceID?: string;
     /**
      * ID of the BPMN node that emitted the task.
      */
     nodeID: string;
-    /**
-     * BPMN element type - typically `UserTask` or `ManualTask`.
-     */
-    taskType?: string;
     /**
      * User the task is currently assigned to. Empty when the task is in a candidate pool but not yet claimed.
      */
@@ -42,6 +34,14 @@ export type UserTask = {
      * Identity-provider groups whose members may claim or complete this task.
      */
     candidateGroups?: Array<string>;
+    /**
+     * When the task is due, from the model's `taskSchedule`. Absent when the task has none.
+     */
+    dueDate?: string;
+    /**
+     * The task's priority from the model's `priorityDefinition`, 50 when the model sets none.
+     */
+    priority: number;
     /**
      * Static form reference declared on the task (BPMN `formKey`). Resolved by the consumer to display the right UI.
      */
@@ -82,6 +82,10 @@ export type UserTask = {
      * Timestamp when the task reached a terminal status.
      */
     completedAt?: string;
+    /**
+     * User or service account that completed or failed the task. Empty while open, and for a task the engine ended itself.
+     */
+    completedBy?: string;
     /**
      * Caller-supplied correlation key inherited from the parent BPMN process.
      */

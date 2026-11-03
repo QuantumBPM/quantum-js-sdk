@@ -2,26 +2,20 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { BpmnInstanceStatus } from './BpmnInstanceStatus';
 /**
  * A running or completed execution of a BPMN process.
  */
 export type BpmnInstance = {
     /**
-     * ID of the deployed BPMN process definition this instance is running.
+     * Identifier of this instance. Use it to address the instance in all API calls - fetch state, send signals/messages, complete user tasks, list children, cancel, etc.
      */
-    definitionID: string;
+    instanceID: string;
     /**
-     * Stable execution identifier for this instance. Use this to address the instance in all API calls - fetch state, send signals/messages, complete user tasks, list children, cancel, etc.
+     * Identifier of the parent instance that started this one via a CallActivity. Empty for top-level instances.
      */
-    workflowID: string;
-    /**
-     * Execution identifier of the parent instance that started this one via a CallActivity. Empty for top-level instances.
-     */
-    parentWorkflowID?: string;
-    /**
-     * Current lifecycle status of the instance.
-     */
-    status: BpmnInstance.status;
+    parentInstanceID?: string;
+    status: BpmnInstanceStatus;
     /**
      * User or service account that initiated the instance.
      */
@@ -38,6 +32,10 @@ export type BpmnInstance = {
      * True when at least one unresolved incident is currently attached to this instance. Computed at query time against the open-incidents index - useful for rendering a "needs attention" indicator in instance lists without paying for a per-row state fetch from the engine.
      */
     hasIncident?: boolean;
+    /**
+     * True for a test run, see `StartBpmnTestInstance`.
+     */
+    draft?: boolean;
     /**
      * Timestamp at which this instance was paused at INSTANCE scope. Empty
      * when not instance-suspended. The instance may still be effectively
@@ -73,29 +71,16 @@ export type BpmnInstance = {
      */
     businessId?: string;
     /**
-     * BPMN process ID of the definition this instance was started from. Together with `processVersion` it addresses the version, which `definitionID` alone does not.
+     * BPMN process ID of the definition this instance was started from. Together with `processVersion` it addresses the version.
      */
-    processId?: string;
+    processId: string;
     /**
      * Human-readable name of that process definition.
      */
     processName?: string;
     /**
-     * Version of the process definition this instance was started from.
+     * Version of the process definition this instance was started from. 0 on a test run, which runs no deployed version.
      */
-    processVersion?: number;
+    processVersion: number;
 };
-export namespace BpmnInstance {
-    /**
-     * Current lifecycle status of the instance.
-     */
-    export enum status {
-        RUNNING = 'RUNNING',
-        COMPLETED = 'COMPLETED',
-        FAILED = 'FAILED',
-        CANCELED = 'CANCELED',
-        TERMINATED = 'TERMINATED',
-        TIMED_OUT = 'TIMED_OUT',
-    }
-}
 

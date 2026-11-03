@@ -2,7 +2,7 @@ import {
     QuantumBPM,
     Vars,
     StaticTokenProvider,
-    ZitadelTokenProvider,
+    ClientCredentialsTokenProvider,
     DmnClient,
     BpmnClient,
     Worker,
@@ -15,7 +15,7 @@ describe('public API surface', () => {
         expect(QuantumBPM).toBeDefined();
         expect(Vars).toBeDefined();
         expect(StaticTokenProvider).toBeDefined();
-        expect(ZitadelTokenProvider).toBeDefined();
+        expect(ClientCredentialsTokenProvider).toBeDefined();
         expect(DmnClient).toBeDefined();
         expect(BpmnClient).toBeDefined();
         expect(Worker).toBeDefined();
@@ -45,28 +45,30 @@ describe('BpmnClient.listInstances argument ordering', () => {
         const client = new BpmnClient(fakeRaw, projectId);
 
         await client.listInstances({
-            definitionId: 'def-1',
             status: 'RUNNING',
             hasIncident: true,
             suspended: false,
             createdAfter: '2026-01-01T00:00:00Z',
             businessId: 'ORDER-42',
             processId: 'order_flow',
-            page: 2,
-            pageSize: 10,
+            version: 3,
+            draft: true,
+            cursor: 'next-page',
+            limit: 10,
         });
 
         expect(calls).toHaveLength(1);
         expect(calls[0]).toEqual([
             projectId,
-            'def-1',
             'RUNNING',
             true,
             false,
             '2026-01-01T00:00:00Z',
             'ORDER-42',
             'order_flow',
-            2,
+            3,
+            true,
+            'next-page',
             10,
         ]);
     });
@@ -85,7 +87,7 @@ describe('BpmnClient.listInstances argument ordering', () => {
         const { BpmnClient } = await import('./bpmn');
         const client = new BpmnClient(fakeRaw, projectId);
 
-        await client.listInstances({ page: 3 });
+        await client.listInstances({ cursor: 'next-page' });
 
         expect(calls[0]).toEqual([
             projectId,
@@ -96,8 +98,69 @@ describe('BpmnClient.listInstances argument ordering', () => {
             undefined,
             undefined,
             undefined,
-            3,
             undefined,
+            'next-page',
+            undefined,
+        ]);
+    });
+});
+
+describe('BpmnClient user task list argument ordering', () => {
+    const projectId = '00000000-0000-0000-0000-000000000001';
+
+    test('listUserTasks and listUserTasksForCaller forward cursor and limit last', async () => {
+        const calls: unknown[][] = [];
+        const record = (...args: unknown[]) => {
+            calls.push(args);
+            return Promise.resolve({ data: [], pagination: {} });
+        };
+        const fakeRaw = { bpmn: { listBpmnUserTasks: record, listBpmnUserTasksForCaller: record } } as never;
+        const { BpmnClient } = await import('./bpmn');
+        const client = new BpmnClient(fakeRaw, projectId);
+
+        await client.listUserTasks({ instanceId: 'inst-1', status: 'CREATED', cursor: 'next-page', limit: 5 });
+        await client.listUserTasksForCaller({ cursor: 'next-page', limit: 5 });
+        await client.listUserTasks({ dueBefore: '2026-11-10T12:00:00Z', sort: 'dueDate' });
+        await client.listUserTasksForCaller({ dueAfter: '2026-11-10T12:00:00Z', sort: 'priority' });
+
+        expect(calls[0]).toEqual([
+            projectId, 'inst-1', 'CREATED', undefined, undefined, undefined, undefined,
+            undefined, undefined, undefined, 'next-page', 5,
+        ]);
+        expect(calls[1]).toEqual([projectId, undefined, undefined, undefined, 'next-page', 5]);
+        expect(calls[2]).toEqual([
+            projectId, undefined, undefined, undefined, undefined, undefined, undefined,
+            undefined, '2026-11-10T12:00:00Z', 'dueDate', undefined, undefined,
+        ]);
+        expect(calls[3]).toEqual([projectId, '2026-11-10T12:00:00Z', undefined, 'priority', undefined, undefined]);
+    });
+});
+
+describe('BpmnClient history and version argument ordering', () => {
+    const projectId = '00000000-0000-0000-0000-000000000001';
+
+    test('forward each option to its matching generated parameter', async () => {
+        const calls: unknown[][] = [];
+        const record = (...args: unknown[]) => {
+            calls.push(args);
+            return Promise.resolve({});
+        };
+        const fakeRaw = {
+            bpmn: { getBpmnInstanceHistory: record, getBpmnInstanceHistoryEntry: record, getBpmnProcessVersion: record },
+        } as never;
+        const { BpmnClient } = await import('./bpmn');
+        const client = new BpmnClient(fakeRaw, projectId);
+
+        await client.getInstanceHistory('inst-1', { fromSeq: 4, beforeSeq: 9, limit: 50 });
+        await client.getInstanceHistory('inst-1', { beforeSeq: 9 });
+        await client.getInstanceHistoryEntry('inst-1', 7);
+        await client.getProcessVersion('order_flow', 3, { createdAfter: '2026-01-01T00:00:00Z' });
+
+        expect(calls).toEqual([
+            [projectId, 'inst-1', 4, 9, 50],
+            [projectId, 'inst-1', undefined, 9, undefined],
+            [projectId, 'inst-1', 7],
+            [projectId, 'order_flow', 3, '2026-01-01T00:00:00Z'],
         ]);
     });
 });
@@ -111,7 +174,7 @@ describe('BpmnClient businessId threading', () => {
             default: {
                 startBpmnInstance: (_projectId: string, body: Record<string, unknown>) => {
                     bodies.push(body);
-                    return Promise.resolve({ workflowID: 'wf-1' });
+                    return Promise.resolve({ instanceID: 'wf-1' });
                 },
             },
         } as never;
@@ -129,7 +192,7 @@ describe('BpmnClient businessId threading', () => {
             default: {
                 startBpmnInstance: (_projectId: string, body: Record<string, unknown>) => {
                     bodies.push(body);
-                    return Promise.resolve({ workflowID: 'wf-1' });
+                    return Promise.resolve({ instanceID: 'wf-1' });
                 },
             },
         } as never;
@@ -187,26 +250,6 @@ describe('DmnClient businessId threading', () => {
         const client = new DmnClient(fakeRaw, projectId);
 
         await client.evaluate('def-1', new Vars(), { businessId: 'ORDER-42' });
-
-        expect(bodies[0]?.businessId).toBe('ORDER-42');
-    });
-
-    test('evaluateById forwards businessId in the request body', async () => {
-        const bodies: Array<Record<string, unknown>> = [];
-        const fakeRaw = {
-            default: {
-                evaluateStored: (_pid: string, _did: string, body: Record<string, unknown>) => {
-                    bodies.push(body);
-                    return Promise.resolve({});
-                },
-            },
-        } as never;
-        const { DmnClient } = await import('./dmn');
-        const client = new DmnClient(fakeRaw, projectId);
-
-        await client.evaluateById('11111111-1111-1111-1111-111111111111', new Vars(), {
-            businessId: 'ORDER-42',
-        });
 
         expect(bodies[0]?.businessId).toBe('ORDER-42');
     });

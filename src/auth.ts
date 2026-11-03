@@ -1,13 +1,7 @@
 /**
- * Authentication helpers. Provides the TokenProvider interface plus two
- * implementations:
- *
- * - ZitadelTokenProvider: service-account JWT-bearer flow against Zitadel,
- *   with in-memory token caching.
- * - StaticTokenProvider: returns the same bearer token on every call.
+ * Authentication helpers: the TokenProvider interface, ClientCredentialsTokenProvider
+ * for any OIDC provider, and StaticTokenProvider for a fixed bearer token.
  */
-import * as fs from 'fs';
-import * as jwt from 'jsonwebtoken';
 import axios from 'axios';
 
 import { RawClient } from './generated/RawClient';
@@ -26,79 +20,88 @@ export class StaticTokenProvider implements TokenProvider {
     }
 }
 
-interface ZitadelKeyFile {
-    userId: string;
-    keyId: string;
-    key: string;
+/** Options for ClientCredentialsTokenProvider. */
+export interface ClientCredentialsOptions {
+    /** The identity provider's OAuth 2.0 token endpoint. */
+    tokenUrl: string;
+    clientId: string;
+    clientSecret: string;
+    /** Sent space-joined as the `scope` parameter. Empty sends none. */
+    scopes?: string[];
+    /** Sent as the `audience` parameter when set. Some providers, such as Auth0, require it. */
+    audience?: string;
 }
 
+const REFRESH_MARGIN_MS = 60_000;
+const DEFAULT_LIFETIME_S = 300;
+
 /**
- * Authenticates against Zitadel using a service-account JSON Key file via the
- * JWT Profile (`urn:ietf:params:oauth:grant-type:jwt-bearer`) grant. Tokens
- * are cached until shortly before expiry.
+ * Fetches access tokens from any OIDC provider with the OAuth 2.0 client
+ * credentials grant. The token is cached until less than 60 seconds of its
+ * lifetime remain, and parallel callers share one in-flight request.
  */
-export class ZitadelTokenProvider implements TokenProvider {
+export class ClientCredentialsTokenProvider implements TokenProvider {
     private accessToken: string | null = null;
     private expiresAt = 0;
-    private readonly keyData: ZitadelKeyFile;
-    private readonly issuer: string;
-    private readonly scopes: string[];
+    private inFlight: Promise<string> | null = null;
 
-    /**
-     * @param keyFile  Path to the service-account JSON Key file from Zitadel.
-     * @param issuer   Zitadel instance base URL (e.g. https://auth.quantumbpm.com).
-     * @param projectId Zitadel project ID. When provided, adds the audience
-     *                  scope so issued tokens are accepted by the API.
-     */
-    constructor(keyFile: string, issuer: string, projectId?: string) {
-        const content = fs.readFileSync(keyFile, 'utf-8');
-        this.keyData = JSON.parse(content) as ZitadelKeyFile;
-        this.issuer = issuer.replace(/\/$/, '');
-
-        const scopes = [
-            'openid',
-            'profile',
-            'urn:zitadel:iam:user:resourceowner',
-            'urn:zitadel:iam:org:projects:roles',
-        ];
-        if (projectId) {
-            scopes.push(`urn:zitadel:iam:org:project:id:${projectId}:aud`);
+    constructor(private readonly options: ClientCredentialsOptions) {
+        if (!options.tokenUrl || !options.clientId || !options.clientSecret) {
+            throw new Error('quantumbpm: tokenUrl, clientId and clientSecret are required');
         }
-        this.scopes = scopes;
     }
 
     async getToken(): Promise<string> {
-        if (this.accessToken && Date.now() < this.expiresAt - 60_000) {
+        if (this.accessToken && Date.now() < this.expiresAt - REFRESH_MARGIN_MS) {
             return this.accessToken;
         }
+        if (!this.inFlight) {
+            this.inFlight = this.fetchToken().finally(() => {
+                this.inFlight = null;
+            });
+        }
+        return this.inFlight;
+    }
 
-        const now = Math.floor(Date.now() / 1000);
-        const assertion = jwt.sign(
-            {
-                iss: this.keyData.userId,
-                sub: this.keyData.userId,
-                aud: this.issuer,
-                iat: now,
-                exp: now + 3600,
+    private async fetchToken(): Promise<string> {
+        const { tokenUrl, clientId, clientSecret, scopes, audience } = this.options;
+        const form = new URLSearchParams({
+            grant_type: 'client_credentials',
+            client_id: clientId,
+            client_secret: clientSecret,
+        });
+        if (scopes && scopes.length > 0) form.set('scope', scopes.join(' '));
+        if (audience) form.set('audience', audience);
+
+        const requestedAt = Date.now();
+        const response = await axios.post<string>(tokenUrl, form.toString(), {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                Accept: 'application/json',
             },
-            this.keyData.key,
-            { algorithm: 'RS256', keyid: this.keyData.keyId },
-        );
+            responseType: 'text',
+            validateStatus: () => true,
+        });
+        if (response.status < 200 || response.status > 299) {
+            throw new Error(`quantumbpm: token request failed (${response.status}): ${response.data}`);
+        }
 
-        const response = await axios.post(
-            `${this.issuer}/oauth/v2/token`,
-            new URLSearchParams({
-                grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-                scope: this.scopes.join(' '),
-                assertion,
-            }),
-            {
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            },
-        );
+        let body: { access_token?: unknown; expires_in?: unknown };
+        try {
+            body = JSON.parse(response.data);
+        } catch {
+            throw new Error(`quantumbpm: token response is not JSON: ${response.data}`);
+        }
+        if (typeof body.access_token !== 'string' || !body.access_token) {
+            throw new Error('quantumbpm: token response has no access_token');
+        }
+        const expiresIn = body.expires_in == null ? DEFAULT_LIFETIME_S : Number(body.expires_in);
+        if (!Number.isFinite(expiresIn)) {
+            throw new Error(`quantumbpm: token response has an invalid expires_in: ${body.expires_in}`);
+        }
 
-        this.accessToken = response.data.access_token as string;
-        this.expiresAt = Date.now() + (response.data.expires_in as number) * 1000;
+        this.accessToken = body.access_token;
+        this.expiresAt = requestedAt + expiresIn * 1000;
         return this.accessToken;
     }
 }

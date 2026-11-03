@@ -13,19 +13,15 @@
  */
 export type BpmnIncidentRecord = {
     /**
-     * Engine-assigned incident identifier, unique within the workflow. Resolve the incident with it.
+     * Engine-assigned incident identifier, unique within the instance. Resolve the incident with it.
      */
     incidentID: string;
     /**
      * Identifier of the instance that produced the incident.
      */
-    workflowID: string;
+    instanceID: string;
     /**
-     * ID of the process definition the instance is running. May be absent when the source definition was deleted.
-     */
-    definitionID?: string;
-    /**
-     * BPMN process ID of the parent definition. Convenience field; absent when definitionID is unresolved.
+     * BPMN process ID of the definition the instance is running.
      */
     processID?: string;
     /**
@@ -77,7 +73,7 @@ export type BpmnIncidentRecord = {
      */
     resolvedAt?: string;
     /**
-     * Identifier of the user who resolved the incident, or "system:reconcile" when corrected by drift reconciliation. Empty for engine-internal resolves (boundary catches, modification cancel) and for open incidents.
+     * User or service account that resolved the incident. Empty for engine-internal resolves (boundary catches, modification cancel) and for open incidents.
      */
     resolvedBy?: string;
 };
@@ -87,21 +83,19 @@ export namespace BpmnIncidentRecord {
      */
     export enum errorType {
         BPMN_ERROR = 'BpmnError',
-        ESCALATION_ERROR = 'EscalationError',
         COMPENSATION_ERROR = 'CompensationError',
         FEEL_ERROR = 'FeelError',
-        NO_HANDLER = 'NoHandler',
         GATEWAY_NO_MATCH = 'GatewayNoMatch',
         TIMER_RESOLUTION = 'TimerResolution',
         LINK_NOT_FOUND = 'LinkNotFound',
         MIGRATION_ERROR = 'MigrationError',
-        SUBSCRIPTION_ERROR = 'SubscriptionError',
-        ROTATION_LIMIT_ERROR = 'RotationLimitError',
-        SNAPSHOT_SIZE_EXCEEDED = 'SnapshotSizeExceeded',
         CALL_ACTIVITY_CANCELED = 'CallActivityCanceled',
         EXTERNAL_ROW_REFRESH_ERROR = 'ExternalRowRefreshError',
         JOB_LOCK_LOST = 'JobLockLost',
         DECISION_NOT_FOUND = 'DecisionNotFound',
+        DECISION_EVALUATION_ERROR = 'DecisionEvaluationError',
+        PROCESS_NOT_FOUND = 'ProcessNotFound',
+        PROCESS_SUSPENDED = 'ProcessSuspended',
         UNKNOWN = 'Unknown',
     }
 }

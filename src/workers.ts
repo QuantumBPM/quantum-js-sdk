@@ -32,8 +32,8 @@ export class BpmnError extends Error {
 export interface Job<TVars = Record<string, unknown>> {
     /** Stable key for the activity execution. Path parameter for completion. */
     executionKey: string;
-    /** Workflow ID of the originating instance. */
-    workflowId: string;
+    /** ID of the originating instance. */
+    instanceId: string;
     /** Worker selector - the task type the handler was registered for. */
     taskType: string;
     /** Input variables resolved by the service task at activity entry. */
@@ -262,7 +262,7 @@ export class Worker {
             const vars = Vars.fromWireMap(raw.variables);
             const job: Job<unknown> = {
                 executionKey: raw.executionKey,
-                workflowId: raw.workflowID,
+                instanceId: raw.instanceID,
                 taskType: r.taskType,
                 vars,
                 typed: vars.toRecord(),
@@ -344,7 +344,7 @@ export class Worker {
     private async complete(job: ExternalJob, vars: Vars): Promise<void> {
         try {
             await this.raw.default.completeBpmnExternalJob(this.projectId, job.executionKey, {
-                workflowID: job.workflowID,
+                instanceID: job.instanceID,
                 clientID: this.clientId,
                 variables: vars.toWireMap() as any,
             });
@@ -356,6 +356,7 @@ export class Worker {
     private async throwError(job: ExternalJob, code: string, vars: Vars, retryable: boolean): Promise<void> {
         try {
             await this.raw.bpmn.throwBpmnExternalJobError(this.projectId, job.executionKey, {
+                instanceID: job.instanceID,
                 errorCode: code,
                 clientID: this.clientId,
                 retryable,
