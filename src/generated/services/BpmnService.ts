@@ -5,7 +5,7 @@
 import type { BpmnActivityState } from '../models/BpmnActivityState';
 import type { BpmnHistoryPage } from '../models/BpmnHistoryPage';
 import type { BpmnIncidentRecordPaginatedResponse } from '../models/BpmnIncidentRecordPaginatedResponse';
-import type { BpmnInstanceChildrenResponse } from '../models/BpmnInstanceChildrenResponse';
+import type { BpmnInstancePaginatedResponse } from '../models/BpmnInstancePaginatedResponse';
 import type { BpmnProcessSummaryPaginatedResponse } from '../models/BpmnProcessSummaryPaginatedResponse';
 import type { BpmnProcessVersion } from '../models/BpmnProcessVersion';
 import type { BpmnProcessVersionPaginatedResponse } from '../models/BpmnProcessVersionPaginatedResponse';
@@ -344,25 +344,33 @@ export class BpmnService {
     }
     /**
      * List child instances of a BPMN instance
-     * Returns instances that this instance spawned via CallActivity elements.
-     * Useful for navigating into a multi-level process hierarchy (parents
-     * can be discovered via `parentInstanceID` on the child).
+     * Returns instances that this instance spawned via CallActivity elements,
+     * newest first. Useful for navigating into a multi-level process hierarchy
+     * (parents can be discovered via `parentInstanceID` on the child).
      *
      * @param projectId
      * @param instanceId
-     * @returns BpmnInstanceChildrenResponse OK
+     * @param cursor The `nextCursor` of the page before, absent for the first page.
+     * @param limit Most instances per page, 20 by default and 100 at most.
+     * @returns BpmnInstancePaginatedResponse OK
      * @throws ApiError
      */
     public getBpmnInstanceChildren(
         projectId: string,
         instanceId: string,
-    ): CancelablePromise<BpmnInstanceChildrenResponse> {
+        cursor?: string,
+        limit?: number,
+    ): CancelablePromise<BpmnInstancePaginatedResponse> {
         return this.httpRequest.request({
             method: 'GET',
             url: '/projects/{projectID}/bpmn/instances/{instanceID}/children',
             path: {
                 'projectID': projectId,
                 'instanceID': instanceId,
+            },
+            query: {
+                'cursor': cursor,
+                'limit': limit,
             },
         });
     }

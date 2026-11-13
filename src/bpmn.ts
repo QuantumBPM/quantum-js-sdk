@@ -2,7 +2,6 @@ import { RawClient } from './generated/RawClient';
 import { BpmnActivityState } from './generated/models/BpmnActivityState';
 import { BpmnHistoryPage } from './generated/models/BpmnHistoryPage';
 import { BpmnInstancePaginatedResponse } from './generated/models/BpmnInstancePaginatedResponse';
-import { BpmnInstanceChildrenResponse } from './generated/models/BpmnInstanceChildrenResponse';
 import { BpmnInstanceState } from './generated/models/BpmnInstanceState';
 import { BpmnProcessSummaryPaginatedResponse } from './generated/models/BpmnProcessSummaryPaginatedResponse';
 import { BpmnProcessVersion } from './generated/models/BpmnProcessVersion';
@@ -23,7 +22,6 @@ export type {
     BpmnActivityState,
     BpmnHistoryPage,
     BpmnInstancePaginatedResponse,
-    BpmnInstanceChildrenResponse,
     BpmnInstanceState,
     BpmnProcessSummaryPaginatedResponse,
     BpmnProcessVersion,
@@ -279,9 +277,13 @@ export class BpmnClient {
         );
     }
 
-    /** Children spawned via CallActivity. */
-    async getInstanceChildren(instanceId: string): Promise<BpmnInstanceChildrenResponse> {
-        return this.raw.bpmn.getBpmnInstanceChildren(this.projectId, instanceId);
+    /**
+     * Page of the instances this instance spawned via CallActivity, newest
+     * first. Pass the page's `pagination.nextCursor` as `cursor` for the next
+     * one. It is absent on the last page.
+     */
+    async getInstanceChildren(instanceId: string, opts: CursorOptions = {}): Promise<BpmnInstancePaginatedResponse> {
+        return this.raw.bpmn.getBpmnInstanceChildren(this.projectId, instanceId, opts.cursor, opts.limit);
     }
 
     /**

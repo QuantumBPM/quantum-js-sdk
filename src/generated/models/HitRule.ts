@@ -11,6 +11,10 @@ export type HitRule = {
      * ID of the matched rule from the DMN XML.
      */
     ruleID?: string;
+    /**
+     * The matched rule's 0-based position in its decision table, in the evaluated definitions version.
+     */
+    ruleIndex?: number;
     outputs?: FeelValue;
 };
 

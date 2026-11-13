@@ -21,7 +21,6 @@ export { BpmnIncident } from './models/BpmnIncident';
 export { BpmnIncidentRecord } from './models/BpmnIncidentRecord';
 export type { BpmnIncidentRecordPaginatedResponse } from './models/BpmnIncidentRecordPaginatedResponse';
 export type { BpmnInstance } from './models/BpmnInstance';
-export type { BpmnInstanceChildrenResponse } from './models/BpmnInstanceChildrenResponse';
 export type { BpmnInstancePaginatedResponse } from './models/BpmnInstancePaginatedResponse';
 export type { BpmnInstanceState } from './models/BpmnInstanceState';
 export { BpmnInstanceStatus } from './models/BpmnInstanceStatus';
@@ -47,6 +46,7 @@ export type { CreateBpmnResourceRequest } from './models/CreateBpmnResourceReque
 export type { CreateDefinitionRequest } from './models/CreateDefinitionRequest';
 export type { CursorPage } from './models/CursorPage';
 export type { DecisionInputField } from './models/DecisionInputField';
+export { DecisionKind } from './models/DecisionKind';
 export type { DecisionSummary } from './models/DecisionSummary';
 export type { DecisionVersion } from './models/DecisionVersion';
 export type { DecisionVersionList } from './models/DecisionVersionList';

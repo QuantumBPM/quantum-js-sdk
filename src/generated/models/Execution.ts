@@ -39,6 +39,13 @@ export type Execution = {
      */
     nodeID?: string;
     /**
+     * The business rule task execution the evaluation ran in, the `executionKey` of its entries
+     * in the instance history. Each run of the task, a retry included, has its own. Absent on an
+     * evaluation through the API.
+     *
+     */
+    executionKey?: string;
+    /**
      * Timestamp when the evaluation ran.
      */
     executedAt: string;

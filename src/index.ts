@@ -110,7 +110,6 @@ export type {
     BpmnActivityState,
     BpmnHistoryPage,
     BpmnInstancePaginatedResponse,
-    BpmnInstanceChildrenResponse,
     BpmnInstanceState,
     BpmnProcessSummaryPaginatedResponse,
     BpmnProcessVersion,

@@ -468,9 +468,10 @@ export class DefaultService {
     }
     /**
      * List decisions
-     * Returns one row per deployed decision in the project, at its latest
-     * version and with the definition that version came from. Useful for
-     * picking a target decision when wiring a BPMN BusinessRuleTask.
+     * Returns one row per deployed decision or decision service in the
+     * project, at its latest version and with the definition that version
+     * came from. Useful for picking a target when wiring a BPMN
+     * BusinessRuleTask.
      *
      * @param projectId
      * @param page Page number (1-indexed)
@@ -538,10 +539,12 @@ export class DefaultService {
      * @param projectId
      * @param definitionsId Filter by DMN `<definitions id>` (XML id).
      * @param version Only evaluations of this deployed version of `definitionsID`. Ignored without `definitionsID`.
+     * @param instanceId Only the evaluations of this process instance's business rule tasks.
+     * @param executionKey Only the evaluation of this business rule task execution, the `executionKey` of its entries in the instance history. Use it with `instanceID`.
      * @param businessId Exact-match filter on the caller-supplied correlation key.
      * @param startDate Only return executions at or after this instant (ISO 8601). Bounds the scan and the reported total; omit for the full unbounded history.
-     * @param page Page number (1-indexed)
-     * @param pageSize Number of items per page (max 100)
+     * @param cursor The `nextCursor` of the page before, absent for the first page.
+     * @param limit Most executions per page, 20 by default and 100 at most.
      * @returns PaginatedExecutionsResponse OK
      * @throws ApiError
      */
@@ -549,10 +552,12 @@ export class DefaultService {
         projectId: string,
         definitionsId?: string,
         version?: number,
+        instanceId?: string,
+        executionKey?: string,
         businessId?: string,
         startDate?: string,
-        page: number = 1,
-        pageSize: number = 20,
+        cursor?: string,
+        limit?: number,
     ): CancelablePromise<PaginatedExecutionsResponse> {
         return this.httpRequest.request({
             method: 'GET',
@@ -563,10 +568,12 @@ export class DefaultService {
             query: {
                 'definitionsID': definitionsId,
                 'version': version,
+                'instanceID': instanceId,
+                'executionKey': executionKey,
                 'businessId': businessId,
                 'startDate': startDate,
-                'page': page,
-                'pageSize': pageSize,
+                'cursor': cursor,
+                'limit': limit,
             },
             errors: {
                 400: `Bad Request`,

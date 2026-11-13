@@ -2,13 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CursorPage } from './CursorPage';
 import type { Execution } from './Execution';
-import type { PaginationMetadata } from './PaginationMetadata';
 /**
  * Page of recorded DMN executions.
  */
 export type PaginatedExecutionsResponse = {
     data: Array<Execution>;
-    pagination: PaginationMetadata;
+    pagination: CursorPage;
 };
 
