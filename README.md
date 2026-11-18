@@ -16,7 +16,7 @@ Node.js 18+ (uses native `AbortController` and `AbortSignal`).
 | ------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `QuantumBPM`                                      | Top-level client exposing `.dmn` and `.bpmn`, plus `newWorker(...)`           |
 | `ClientCredentialsTokenProvider`, `StaticTokenProvider` | Authentication. Implement `TokenProvider` for BYO providers             |
-| `DmnClient`                                       | DMN evaluation: stored definitions, ad-hoc XML, batch                         |
+| `DmnClient`                                       | DMN deploy and evaluation: stored definitions, ad-hoc XML, batch              |
 | `BpmnClient`                                      | BPMN resources, instances, messaging, user tasks, processes                   |
 | `Worker`                                          | External job worker runtime - long-poll, lock heartbeat, dispatch             |
 | `Vars`                                            | Variables wrapper with typed accessors and FEEL-context conversion            |
@@ -99,7 +99,17 @@ class MyProvider implements TokenProvider {
 
 ## DMN evaluation
 
-The `client.dmn` sub-client offers four methods.
+The `client.dmn` sub-client deploys definitions and evaluates them.
+
+### Deploy a definition
+
+```typescript
+const draft = await client.dmn.createDefinition('loan-eligibility', dmnXml);
+const deployed = await client.dmn.deployDefinition(draft.id);
+// deployed.version is the version the deploy gave it.
+```
+
+A draft is not evaluable until it is deployed. Saving XML identical to the latest deployed version of its `<definitions id>` rejects with an `ApiError` of status 409, and nothing is saved.
 
 ### Evaluate a stored definition
 

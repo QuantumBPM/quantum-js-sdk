@@ -254,3 +254,34 @@ describe('DmnClient businessId threading', () => {
         expect(bodies[0]?.businessId).toBe('ORDER-42');
     });
 });
+
+describe('DmnClient definitions', () => {
+    test('createDefinition and deployDefinition call the project endpoints', async () => {
+        const calls: unknown[][] = [];
+        const draft = { id: 'def-uuid', isDeployed: false };
+        const deployed = { id: 'def-uuid', isDeployed: true, version: 3 };
+        const fakeRaw = {
+            default: {
+                createDefinition: (...args: unknown[]) => {
+                    calls.push(['create', ...args]);
+                    return Promise.resolve(draft);
+                },
+                deployDefinition: (...args: unknown[]) => {
+                    calls.push(['deploy', ...args]);
+                    return Promise.resolve(deployed);
+                },
+            },
+        } as never;
+        const projectId = '00000000-0000-0000-0000-000000000001';
+        const { DmnClient } = await import('./dmn');
+        const client = new DmnClient(fakeRaw, projectId);
+
+        expect(await client.createDefinition('rating.dmn', '<definitions/>')).toBe(draft);
+        expect(await client.deployDefinition('def-uuid')).toBe(deployed);
+
+        expect(calls).toEqual([
+            ['create', projectId, { name: 'rating.dmn', xml: '<definitions/>' }],
+            ['deploy', projectId, 'def-uuid'],
+        ]);
+    });
+});

@@ -94,6 +94,7 @@ export {
     EvaluateOptions,
     DesignOptions,
 } from './dmn';
+export type { Definition } from './dmn';
 export {
     BpmnClient,
     PageOptions,

@@ -1,8 +1,11 @@
 import { RawClient } from './generated/RawClient';
 import { BatchEvaluationResponse } from './generated/models/BatchEvaluationResponse';
+import { Definition } from './generated/models/Definition';
 import { EvaluationResult } from './generated/models/EvaluationResult';
 
 import { Vars } from './variables';
+
+export type { Definition };
 
 /** Map of decision name → result, the standard DMN evaluation response shape. */
 export type DmnResult = Record<string, EvaluationResult>;
@@ -35,12 +38,29 @@ export interface DesignOptions {
     additionalXMLs?: string[];
 }
 
-/** DmnClient evaluates DMN definitions in a single project. */
+/** DmnClient deploys and evaluates DMN definitions in a single project. */
 export class DmnClient {
     constructor(
         private readonly raw: RawClient,
         private readonly projectId: string,
     ) {}
+
+    /**
+     * Save DMN XML as a draft, which is not evaluable until deployDefinition()
+     * deploys it. XML identical to the latest deployed version of its
+     * `<definitions id>` is refused with 409.
+     */
+    async createDefinition(name: string, xml: string): Promise<Definition> {
+        return this.raw.default.createDefinition(this.projectId, { name, xml });
+    }
+
+    /**
+     * Deploy a draft and return it with the version it got. A draft identical
+     * to the latest deployed version is refused with 409.
+     */
+    async deployDefinition(definitionId: string): Promise<Definition> {
+        return this.raw.default.deployDefinition(this.projectId, definitionId);
+    }
 
     /**
      * Run a stored DMN definition identified by its DMN XML
